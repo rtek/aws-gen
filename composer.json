@@ -1,0 +1,21 @@
+{
+    "name": "rtek/aws-gen",
+    "description": "Generate PHP classes for AWS data types",
+    "license": "MIT",
+    "require": {
+        "php": "^7.1",
+        "aws/aws-sdk-php": "^3.87",
+        "symfony/console": "^4.2",
+        "zendframework/zend-code": "^3.3",
+        "symfony/finder": "^4.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^7.5"
+    },
+
+    "autoload": {
+        "psr-4": {
+            "Rtek\\AwsGen\\": "src"
+        }
+    }
+}
