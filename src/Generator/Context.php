@@ -22,9 +22,9 @@ class Context
     protected $classes = [];
 
     /**
-     * @return Service
+     * @return Service|null
      */
-    public function getService(): Service
+    public function getService(): ?Service
     {
         return $this->service;
     }
@@ -43,9 +43,9 @@ class Context
     }
 
     /**
-     * @return Operation
+     * @return Operation|null
      */
-    public function getOperation(): Operation
+    public function getOperation(): ?Operation
     {
         return $this->operation;
     }
@@ -62,8 +62,6 @@ class Context
     {
         $this->operation = null;
     }
-
-
 
     public function registerClassForModel(AbstractModel $model): bool
     {
@@ -83,9 +81,10 @@ class Context
             'service' => $this->service,
             'operation' => $this->operation,
         ];
-        return false;
 
+        return false;
     }
+
 
 
     public function hash(AbstractModel $model): string
@@ -106,6 +105,11 @@ class Context
     public function getClassService(string $hash): ?Service
     {
         return $this->classes[$hash]['service'] ?? null;
+    }
+
+    public function getClassOperation(string $hash): ?Operation
+    {
+        return $this->classes[$hash]['operation'] ?? null;
     }
 
 
