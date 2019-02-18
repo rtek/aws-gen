@@ -18,12 +18,6 @@ class Context
     /** @var Operation */
     protected $operation;
 
-    /** @var StructureShape */
-    protected $structureShape;
-
-    /** @var Shape */
-    protected $shape;
-
     /** @var array */
     protected $classes = [];
 
@@ -69,72 +63,32 @@ class Context
         $this->operation = null;
     }
 
-    /**
-     * @return StructureShape
-     */
-    public function getStructureShape(): StructureShape
-    {
-        return $this->structureShape;
-    }
-
-    /**
-     * @param StructureShape $structureShape
-     */
-    public function enterStructureShape(StructureShape $structureShape): void
-    {
-        $this->structureShape = $structureShape;
-    }
-
-    public function exitStructureShape(): void
-    {
-        $this->structureShape = null;
-    }
-
-    /**
-     * @return Shape
-     */
-    public function getShape(): Shape
-    {
-        return $this->shape;
-    }
-
-    /**
-     * @param Shape $shape
-     */
-    public function enterShape(Shape $shape): void
-    {
-        $this->shape = $shape;
-    }
-
-    public function exitShape(): void
-    {
-        $this->shape = null;
-    }
 
 
-    public function registerClassForShape(Shape $shape): void
+    public function registerClassForModel(AbstractModel $model): bool
     {
-        $hash = $this->hash($shape);
+        $hash = $this->hash($model);
 
         if($exists = &$this->classes[$hash] ?? null) {
-            foreach(['service', 'operation', 'structureShape'] as $key) {
+            foreach(['service', 'operation'] as $key) {
                 if($exists[$key] !== $this->{$key}) {
                     $exists[$key] = null;
                 }
             }
-        } else {
-            $this->classes[$hash] = [
-                'model' => $shape,
-                'service' => $this->service,
-                'operation' => $this->operation,
-                'structureShape' => $this->structureShape,
-            ];
+            return true;
         }
+
+        $this->classes[$hash] = [
+            'model' => $model,
+            'service' => $this->service,
+            'operation' => $this->operation,
+        ];
+        return false;
 
     }
 
 
-    protected function hash(AbstractModel $model): string
+    public function hash(AbstractModel $model): string
     {
         return md5(print_r($model->toArray(), true));
     }
