@@ -31,13 +31,14 @@ $gen->setLogger(new class extends AbstractLogger {
 });
 
 $gen->addServices([
-       // 'dynamodb' => 'latest',
+        'ec2' => 'latest',
+        'dynamodb' => 'latest',
         'streams.dynamodb' => 'latest',
     ])->setNamespace('Dev');
 
-$gen->setFilter(function(AbstractModel $model, Context $context) {
+/*$gen->setFilter(function(AbstractModel $model, Context $context) {
     return $model instanceof Service || ($model instanceof Operation && $model['name'] === 'ListStreams') || $context->getOperation();
-});
+});*/
 
 $out = 'data/tmp/output/';
 foreach($gen() as $cls) {
@@ -55,7 +56,8 @@ $config = require 'config.php';
 
 $client = new DynamoDbStreamsClient($config['aws']);
 
-$output =  $client->listStreams(new ListStreamsInput());
+$input = ListStreamsInput::create()->Limit(10)->TableName('obvius_logs');
+$output =  $client->listStreams($input);
 
 foreach($output->Streams() as $stream) {
     var_dump($stream->getTableName());
