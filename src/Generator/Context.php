@@ -7,8 +7,6 @@ namespace Rtek\AwsGen\Generator;
 use Aws\Api\AbstractModel;
 use Aws\Api\Operation;
 use Aws\Api\Service;
-use Aws\Api\Shape;
-use Aws\Api\StructureShape;
 
 class Context
 {
