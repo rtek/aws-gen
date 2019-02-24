@@ -12,6 +12,7 @@ use Aws\Api\Service;
 use Aws\Api\Shape;
 use Aws\Api\StructureShape;
 use Aws\AwsClient;
+use function Aws\manifest;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
@@ -52,16 +53,20 @@ class Generator implements LoggerAwareInterface
     /** @var string */
     protected $namespace = '\\';
 
-    protected $debugIndent = 0;
-
     /** @var callable */
     protected $filter;
+
+    /** @var NameResolver  */
+    protected $nameResolver;
+
+    protected $debugIndent = 0;
 
     public function __construct(?ApiProvider $provider = null)
     {
         $this->provider = $provider ?? ApiProvider::defaultProvider();
         $this->logger = new NullLogger();
         $this->filter = function() { return true; };
+        $this->nameResolver = new NameResolver();
     }
 
     /**
@@ -71,6 +76,7 @@ class Generator implements LoggerAwareInterface
     public function setNamespace(string $namespace)
     {
         $this->namespace = trim($namespace,'\\');
+        $this->logger->notice("Set namespace to: {$this->namespace}");
         return $this;
     }
 
@@ -82,11 +88,13 @@ class Generator implements LoggerAwareInterface
         $this->filter = $filter;
     }
 
-    public function addService(string $name, string $namespace, string $version = 'latest')
+    public function addService(string $name, string $version = 'latest')
     {
         if(!$api = ApiProvider::resolve($this->provider, 'api', $name, $version)) {
             throw new GeneratorException("API does not exist '$name' at version '$version'");
         }
+
+        $namespace = manifest($name)['namespace'];
 
         if($this->services[$namespace] ?? null) {
             throw new GeneratorException("Service '$name' already added");
@@ -94,6 +102,8 @@ class Generator implements LoggerAwareInterface
 
         $api['metadata']['namespace'] = $namespace;
         $this->services[$namespace] = new Service($api, $this->provider);
+
+        $this->logger->notice(sprintf('Added service: %s %s (%s) at namespace %s', $name, $version, $api['metadata']['protocol'], $namespace));
 
         return $this;
     }
@@ -103,16 +113,21 @@ class Generator implements LoggerAwareInterface
      */
     public function __invoke(): \Generator
     {
-        $this->context = new Context();
-        foreach ($this->services as $serviceName => $service) {
-            $this->visitModel($service);
-        }
-
         yield from new \ArrayIterator($this->createOtherClassGenerators());
 
-        foreach($this->context->getClassHashes() as $hash) {
-            yield $this->createClassGeneratorForHash($hash);
+        foreach ($this->services as $serviceName => $service) {
+
+            $this->context = new Context($service);
+            $this->context->setLogger($this->logger);
+            $this->nameResolver->setContext($this->context);
+
+            $this->visitModel($service);
+
+            foreach($this->context->getClassHashes() as $hash) {
+                yield $this->createClassGeneratorForHash($hash);
+            }
         }
+
     }
 
     protected function visitModel(AbstractModel $model): void
@@ -140,15 +155,11 @@ class Generator implements LoggerAwareInterface
 
     protected function visitService(Service $service): void
     {
-        $this->context->enterService($service);
-
-        $this->context->registerClassForModel($service);
+        $this->context->registerClass($service);
 
         foreach($service->getOperations() as $operationName => $operation) {
             $this->visitModel($operation);
         }
-
-        $this->context->exitService();
 
     }
 
@@ -166,7 +177,7 @@ class Generator implements LoggerAwareInterface
     {
         if(count($structureShape->getMembers()) === 0) {
             $this->debugLog('Skipped: empty StructureShape');
-        } else if($this->context->registerClassForModel($structureShape)) {
+        } else if($this->context->registerClass($structureShape)) {
             $this->debugLog('Skipped: already visited');
         } else {
             foreach ($structureShape->getMembers() as $shape) {
@@ -177,25 +188,20 @@ class Generator implements LoggerAwareInterface
 
     protected function visitShape(Shape $shape): void
     {
-        $this->debugEnter($shape);
-
         if($shape instanceof StructureShape) {
             $this->visitModel($shape);
         } else if($shape instanceof ListShape) {
-            $this->context->registerClassForModel($shape);
+            $this->context->registerClass($shape);
             $member = $shape->getMember();
             if($member instanceof StructureShape) {
                 $this->visitModel($member);
             }
         } else if($shape instanceof MapShape) {
-            $this->context->registerClassForModel($shape);
+            $this->context->registerClass($shape);
             $this->visitModel($shape->getValue());
         } else {
-            $this->debugLog(sprintf('Did nothing: %s (%s) ', $this->resolveName($shape), get_class($shape)));
+            $this->debugLog(sprintf('Did nothing: %s (%s) ', $this->nameResolver->resolve($shape), get_class($shape)));
         }
-
-
-        $this->debugExit();
     }
 
     protected function createClassGeneratorForHash(string $hash): ClassGenerator
@@ -205,30 +211,27 @@ class Generator implements LoggerAwareInterface
         if($model instanceof Service) {
             return $this->createClassGeneratorForService($model);
         } else if($model instanceof Shape) {
-            $service = $this->context->getClassService($hash);
-
-            //service is not null if there is an operation
             if ($operation = $this->context->getClassOperation($hash)) {
                 if($model === $operation->getInput()) {
-                    return $this->createClassGeneratorForInput($model, $service);
+                    return $this->createClassGeneratorForInput($model);
                 } else if($model === $operation->getOutput()) {
-                    return $this->createClassGeneratorForOutput($model, $service);
+                    return $this->createClassGeneratorForOutput($model);
                 }
             }
-            return $this->createClassGeneratorForData($model, $service);
+            return $this->createClassGeneratorForData($model);
         } else {
             throw new \LogicException('TODO: '. get_class($model));
         }
     }
 
-    protected function createClassGeneratorForInput(Shape $shape, Service $service): ClassGenerator
+    protected function createClassGeneratorForInput(Shape $shape): ClassGenerator
     {
         $cls = $this->createClassGeneratorForShape($shape, ['setPrefix' => '']);
         $cls->setExtendedClass($this->namespace .'\\AbstractInput');
         return $cls;
     }
 
-    protected function createClassGeneratorForOutput(Shape $shape, Service $service): ClassGenerator
+    protected function createClassGeneratorForOutput(Shape $shape): ClassGenerator
     {
         $cls = $this->createClassGeneratorForShape($shape, ['getPrefix' => '']);
         $cls->setExtendedClass('\\Aws\\Result');
@@ -262,104 +265,20 @@ class Generator implements LoggerAwareInterface
     protected function createClassGeneratorForShape(Shape $shape, array $options = []): ClassGenerator
     {
         $cls = $this->createClassGenerator([
-            'name' => $this->resolveName($shape),
+            'name' => $this->nameResolver->resolve($shape),
             'namespaceName' => $this->resolveNamespace($shape),
             'docBlock' => $docBlock = (new DocBlockGenerator())->setWordWrap(false),
         ]);
 
         if($shape instanceof StructureShape) {
             $this->applyStructureShape($cls, $shape, $options);
-          //  return $cls;
         } else if($shape instanceof ListShape) {
             $this->applyListShape($cls, $shape, $options);
-           // return $cls;
-          //  $members = [$shape->getName() => $shape];
         } else if($shape instanceof MapShape) {
             $this->applyMapShape($cls, $shape, $options);
-
-           // $shapeValue = $shape->getValue();
-            /*if($shapeValue instanceof StructureShape) {
-                $members = $shapeValue->getMembers();
-            } else {
-                throw new \LogicException('todo');
-            }*/
         } else {
             throw new \LogicException('todo');
         }
-        return $cls;
-
-        $requiredMembers = $shape['required'] ?? [];
-
-        foreach($members as $memberName => $member) {
-
-            $phpType = $fqcn = null;
-            $returnType = '';
-            $docType = [];
-
-            if(!in_array($memberName, $requiredMembers)) {
-                $returnType = '?';
-                $docType[] = 'null';
-            }
-
-            if($member instanceof StructureShape) {
-                $docType[] = $fqcn = $this->resolveFqcn($member);
-                $returnType .= $fqcn;
-            } else if($member instanceof ListShape) {
-                $fqcn = $this->resolveFqcn($member);
-                $docType = ['array', $fqcn, $this->resolveFqcn($member->getMember()) .'[]'];
-                $returnType = $fqcn;
-            } else if($member instanceof MapShape) {
-                //todo?
-                $fqcn = $this->resolveFqcn($member);
-                $docType = ['array', $fqcn . '[]'];
-                $returnType = 'array';
-            } else {
-                $docType[] = $phpType = $this->resolvePhpType($member);
-                $returnType .= $phpType;
-            }
-
-            $docBlock->setTag(new PropertyTag(
-                $memberName,
-                $docType
-            ));
-
-            if($getPrefix !== null) {
-                $cls->addMethodFromGenerator(
-                    MethodGenerator::fromArray([
-                        'name' => $getPrefix . $memberName,
-                        'returnType' => $returnType,
-                        'body' => $phpType ?
-                            sprintf('return $this[\'%s\'];', $memberName) :
-                            sprintf('return $this[\'%1$s\'] ? new %2$s($this[\'%1$s\']) : null;', $memberName, $fqcn),
-                        'docBlock' => DocBlockGenerator::fromArray([
-                            'tags' => [
-                                new ReturnTag($docType)
-                            ]
-                        ])
-                    ])
-                );
-            }
-
-            if($setPrefix !== null) {
-                $cls->addMethodFromGenerator(
-                    MethodGenerator::fromArray([
-                        'name' => $setPrefix . $memberName,
-                        'parameters' => [ParameterGenerator::fromArray([
-                            'name' => 'value',
-                            'type' => $returnType,
-                        ])],
-                        'body' => sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName),
-                        'docBlock' => DocBlockGenerator::fromArray([
-                            'tags' => [
-                                new VarTag(null, $docType),
-                                new ReturnTag('static')
-                            ]
-                        ])
-                    ])
-                );
-            }
-        }
-
         return $cls;
     }
 
@@ -378,20 +297,47 @@ class Generator implements LoggerAwareInterface
         $member = $shape->getMember();
 
         $this->applyInterfaces($cls, '\IteratorAggregate', '\ArrayAccess', '\Countable');
+
+        if($member instanceof StructureShape) {
+            $body = sprintf(
+                'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
+                $this->namespace,
+                $this->resolveFqcn($member)
+            );
+        } else {
+           $body = 'return new \ArrayIterator($this->data);';
+        }
+
         $cls->addMethodFromGenerator(
             MethodGenerator::fromArray([
                 'name' => 'getIterator',
-                'body' => sprintf(
-                    'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
-                    $this->namespace, $this->resolveFqcn($member)
-                )
+                'body' =>  $body
             ])
         );
     }
 
     protected function applyMapShape(ClassGenerator $cls, MapShape $shape, array $options): void
     {
-        $this->applyMember($cls, $shape, $shape->getName(), $shape->getValue(), $options);
+        $member = $shape->getValue();
+        $this->applyInterfaces($cls, '\IteratorAggregate', '\ArrayAccess', '\Countable');
+
+        if($member instanceof StructureShape) {
+            $body = sprintf(
+                'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
+                $this->namespace,
+                $this->resolveFqcn($member)
+            );
+        } else {
+            $body = 'return new \ArrayIterator($this->data);';
+        }
+
+        $cls->addMethodFromGenerator(
+            MethodGenerator::fromArray([
+                'name' => 'getIterator',
+                'body' =>  $body
+            ])
+        );
+
     }
 
     protected function applyMember(ClassGenerator $cls, Shape $shape, string $memberName, Shape $member, array $options): void
@@ -408,11 +354,29 @@ class Generator implements LoggerAwareInterface
 
         } else if($member instanceof ListShape) {
             $fqcn = $this->resolveFqcn($member);
-            $docTypes = ['array', $fqcn, $this->resolveFqcn($member->getMember()) . '[]'];
-            $returnType =  $fqcn;
+            $listMember = $member->getMember();
+            if($listMember instanceof StructureShape) {
+                $docTypes = ['array', $fqcn, $this->resolveFqcn($member->getMember()) . '[]'];
+                $returnType = $fqcn;
 
-            $getBody = sprintf("return new %s(\$this['%s'] ?? []);",  $fqcn, $memberName);
-            $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
+                $getBody = sprintf("return new %s(\$this['%s'] ?? []);", $fqcn, $memberName);
+                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
+            } else if($listMember instanceof MapShape) {
+
+                $docTypes = ['array'];
+                $returnType = 'array';
+
+                $getBody = sprintf("return \$this['%s'];", $memberName);
+                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
+
+            } else {
+                $phpType = $this->resolvePhpType($listMember);
+                $docTypes = [$phpType .'[]'];
+                $returnType = 'array';
+
+                $getBody = sprintf("return \$this['%s'];", $memberName);
+                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
+            }
 
         } else if($member instanceof MapShape) {
             $fqcn = $this->resolveFqcn($member);
@@ -431,15 +395,13 @@ class Generator implements LoggerAwareInterface
             $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
         }
 
-        $this->applyPropertyTag($cls, $memberName, $docTypes);
+        switch(strtolower($memberName)) {
+            case 'count':
+                $memberName .= '_';
+        }
+
         $this->applyGetter($cls, $memberName, $returnType, $docTypes, $getBody, $options);
         $this->applySetter($cls, $memberName, $returnType, $docTypes, $setBody, $options);
-    }
-
-    protected function applyPropertyTag(ClassGenerator $cls, string $name, array $types): void
-    {
-        $cls->getDocBlock()
-            ->setTag(new PropertyTag($name, $types));
     }
 
     protected function applyGetter(ClassGenerator $cls, string $name, string $returnType, array $docTypes, string $body, array $options): void
@@ -447,14 +409,14 @@ class Generator implements LoggerAwareInterface
         if(null !== $prefix = $options['getPrefix'] ?? null) {
             $cls->addMethodFromGenerator(
                 MethodGenerator::fromArray([
-                    'name' => $prefix . $name,
+                    'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
                     'returnType' => $returnType,
                     'body' =>  $body,
                     'docBlock' => DocBlockGenerator::fromArray([
                         'tags' => [
                             new ReturnTag($docTypes)
                         ]
-                    ])
+                    ])->setWordWrap(false)
                 ])
             );
         }
@@ -465,7 +427,7 @@ class Generator implements LoggerAwareInterface
         if(null !== $prefix = $options['setPrefix'] ?? null) {
             $cls->addMethodFromGenerator(
                 MethodGenerator::fromArray([
-                    'name' => $prefix . $name,
+                    'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
                     'parameters' => [ParameterGenerator::fromArray([
                         'name' => 'value',
                         'type' => $returnType,
@@ -476,7 +438,7 @@ class Generator implements LoggerAwareInterface
                             new VarTag(null, $docTypes),
                             new ReturnTag('static')
                         ]
-                    ])
+                    ])->setWordWrap(false)
                 ])
             );
         }
@@ -493,7 +455,7 @@ class Generator implements LoggerAwareInterface
 
     protected function createClassGeneratorForService(Service $service): ClassGenerator
     {
-        $name = $this->resolveName($service);
+        $name = $this->nameResolver->resolve($service);
 
         $cls = $this->createClassGenerator([
             'name' => $name . 'Client',
@@ -556,7 +518,7 @@ class Generator implements LoggerAwareInterface
                         'body' => 'return new static();',
                         'docBlock' => DocBlockGenerator::fromArray([
                             'tags' => [new ReturnTag('static')]
-                        ])
+                        ])->setWordWrap(false)
                     ])
                 ],
             ])
@@ -584,45 +546,16 @@ class Generator implements LoggerAwareInterface
         return $cls;
     }
 
-    protected function resolveName(AbstractModel $model): string
-    {
-        if($model instanceof Service) {
-            if(!$name = $model->getMetadata('namespace')) {
-                $name = $model->getMetadata('targetPrefix');
-
-                if(stripos($name, 'DynamoDBStreams') !== false) {
-                    $name = 'DynamoDbStreams';
-                } else if(stripos($name, 'DynamoDB') !== false) {
-                    $name = 'DynamoDb';
-                }
-            }
-        } else {
-
-            if($model instanceof StructureShape && count($model->getMembers()) === 0) {
-                $name = 'Empty Structure Shape';
-            } else {
-                $name = $model['name'];
-            }
-        }
-
-        if(!is_string($name)) {
-            throw new \LogicException("Could not resolve name for " . get_class($model));
-        }
-
-        return $name;
-    }
-
     protected function resolveNamespace(AbstractModel $model): string
     {
-        $hash = $this->context->hash($model);
-        $service = $this->context->getClassService($hash);
-        return trim($this->namespace, '\\') .'\\'. ($service ? $this->resolveName($service) : 'Common');
+        $service = $this->context->getService();
+        return trim($this->namespace, '\\') .'\\'. $this->nameResolver->resolve($service);
     }
 
 
     protected function resolveFqcn(AbstractModel $model): string
     {
-        return '\\'. trim($this->resolveNamespace($model) .'\\'. $this->resolveName($model), '\\');
+        return '\\'. trim($this->resolveNamespace($model) .'\\'. $this->nameResolver->resolve($model), '\\');
     }
 
     protected function resolvePhpType(Shape $shape): string
@@ -636,19 +569,20 @@ class Generator implements LoggerAwareInterface
                 return 'int';
             case 'long':
             case 'double':
+            case 'float':
                 return 'float';
             case 'blob':
                 return 'string';
             case 'boolean':
                 return 'bool';
             default:
-                throw new \LogicException('TODO: '. $type);
+                throw new \LogicException('TODO resolvePhpType: '. $type);
         }
     }
 
     protected function debugEnter(AbstractModel $model): void
     {
-        $this->debugLog(sprintf('Entering %s (%s)', $this->resolveName($model), get_class($model)));
+        $this->debugLog(sprintf('Entering %s (%s)', $this->nameResolver->resolve($model), get_class($model)));
         $this->debugIndent++;
     }
 

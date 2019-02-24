@@ -5,11 +5,20 @@ namespace Rtek\AwsGen\Generator;
 
 
 use Aws\Api\AbstractModel;
+use Aws\Api\ListShape;
+use Aws\Api\MapShape;
 use Aws\Api\Operation;
 use Aws\Api\Service;
+use Aws\Api\Shape;
+use Aws\Api\StructureShape;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
+use Psr\Log\NullLogger;
 
-class Context
+class Context implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     /** @var Service */
     protected $service;
 
@@ -19,25 +28,18 @@ class Context
     /** @var array */
     protected $classes = [];
 
+    public function __construct(Service $service)
+    {
+        $this->service = $service;
+        $this->logger = new NullLogger();
+    }
+
     /**
      * @return Service|null
      */
-    public function getService(): ?Service
+    public function getService(): Service
     {
         return $this->service;
-    }
-
-    /**
-     * @param Service $service
-     */
-    public function enterService(Service $service): void
-    {
-        $this->service = $service;
-    }
-
-    public function exitService(): void
-    {
-        $this->service = null;
     }
 
     /**
@@ -61,33 +63,47 @@ class Context
         $this->operation = null;
     }
 
-    public function registerClassForModel(AbstractModel $model): bool
+    public function registerClass(AbstractModel $model): bool
     {
-        $hash = $this->hash($model);
-
-        if($exists = &$this->classes[$hash] ?? null) {
-            foreach(['service', 'operation'] as $key) {
-                if($exists[$key] !== $this->{$key}) {
-                    $exists[$key] = null;
-                }
-            }
-            return true;
+        if($model instanceof Shape && !$this->operation) {
+            throw new \LogicException('Cannot register shape from outside operation context');
         }
 
-        $this->classes[$hash] = [
-            'model' => $model,
+        $hash = $this->hash($model);
+
+        if(!$exists = isset($this->classes[$hash])) {
+            $this->classes[$hash] = [
+                'model' => $model,
+                'contexts' => [],
+            ];
+        }
+
+        $this->classes[$hash]['contexts'][] = [
             'service' => $this->service,
             'operation' => $this->operation,
         ];
 
-        return false;
+        return $exists;
     }
-
-
 
     public function hash(AbstractModel $model): string
     {
-        return md5(print_r($model->toArray(), true));
+        if($model instanceof ListShape) {
+            $toHash = $model->getMember()->toArray();
+        } elseif($model instanceof MapShape) {
+            $toHash = $model->getValue()->toArray();
+        } elseif($model instanceof StructureShape) {
+            $toHash = [];
+            foreach($model->getMembers() as $member) {
+                $toHash[] = $member->toArray();
+            }
+        } else if($model instanceof Service) {
+            $toHash = $model->toArray();
+        } else {
+            $toHash = $model->toArray();
+        }
+
+        return md5(print_r($toHash, true));
     }
 
     public function getClassHashes(): array
@@ -100,14 +116,9 @@ class Context
         return $this->classes[$hash]['model'];
     }
 
-    public function getClassService(string $hash): ?Service
-    {
-        return $this->classes[$hash]['service'] ?? null;
-    }
-
     public function getClassOperation(string $hash): ?Operation
     {
-        return $this->classes[$hash]['operation'] ?? null;
+        return $this->classes[$hash]['contexts'][0]['operation'] ?? null;
     }
 
 
