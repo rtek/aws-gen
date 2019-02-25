@@ -88,17 +88,21 @@ class Context implements LoggerAwareInterface
 
     public function hash(AbstractModel $model): string
     {
-        if($model instanceof ListShape) {
-            $toHash = $model->getMember()->toArray();
-        } elseif($model instanceof MapShape) {
-            $toHash = $model->getValue()->toArray();
-        } elseif($model instanceof StructureShape) {
-            $toHash = [];
+         if($model instanceof StructureShape) {
+            $toHash = [$model['name']];
             foreach($model->getMembers() as $member) {
                 $toHash[] = $member->toArray();
             }
-        } else if($model instanceof Service) {
-            $toHash = $model->toArray();
+        } else if($model instanceof ListShape) {
+            $toHash = [
+                $model->getName(),
+                $model->getMember()->toArray(),
+            ];
+        } else if($model instanceof MapShape) {
+             $toHash = [
+                 $model->getName(),
+                 $model->getValue()->toArray(),
+             ];
         } else {
             $toHash = $model->toArray();
         }

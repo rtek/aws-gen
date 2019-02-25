@@ -34,6 +34,20 @@ class NameResolver
             } else  {
                 $name = $raw;
             }
+
+            if (in_array($name, $this->names)) {
+                $name .= '_';
+            }
+
+            switch (strtolower($name)) {
+                case 'function':
+                case 'namespace':
+                case 'parent':
+                case 'trait':
+                    $name .= '_';
+
+            }
+
             $this->names[$raw] = $name;
         }
 
@@ -51,19 +65,6 @@ class NameResolver
             $name = 'EmptyStructureShape';
         } else {
             $name = ucfirst($shape['name']);
-        }
-
-        if(in_array($name, $this->names)) {
-            $name .= '_';
-        }
-
-        switch(strtolower($name)) {
-            case 'function':
-            case 'namespace':
-            case 'parent':
-            case 'trait':
-                $name .= '_';
-
         }
 
         return $name;

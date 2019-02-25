@@ -134,20 +134,22 @@ class Generator implements LoggerAwareInterface
     {
         $this->debugEnter($model);
 
-        if(($this->filter)($model, $this->context)) {
-            if ($model instanceof Service) {
-                $this->visitService($model);
-            } else if ($model instanceof Operation) {
+        if ($model instanceof Service) {
+            $this->visitService($model);
+        } else if ($model instanceof Operation) {
+            if(($this->filter)($model, $this->context)) {
                 $this->visitOperation($model);
-            } else if ($model instanceof StructureShape) {
-                $this->visitStructureShape($model);
-            } else if ($model instanceof Shape) {
-                $this->visitShape($model);
             } else {
-                throw new \LogicException('TODO');
+                $this->debugLog('Skipped: by filter');
             }
+        } else if ($model instanceof StructureShape) {
+            $this->visitStructureShape($model);
+        } else if($model instanceof ListShape) {
+            $this->visitListShape($model);
+        } else if($model instanceof MapShape) {
+            $this->visitMapShape($model);
         } else {
-            $this->debugLog('Skipped: by filter');
+            $this->debugLog(sprintf('Did nothing: %s (%s) ', $this->nameResolver->resolve($model), get_class($model)));
         }
 
         $this->debugExit();
@@ -156,11 +158,9 @@ class Generator implements LoggerAwareInterface
     protected function visitService(Service $service): void
     {
         $this->context->registerClass($service);
-
         foreach($service->getOperations() as $operationName => $operation) {
             $this->visitModel($operation);
         }
-
     }
 
     protected function visitOperation(Operation $operation): void
@@ -173,35 +173,29 @@ class Generator implements LoggerAwareInterface
         $this->context->exitOperation();
     }
 
-    protected function visitStructureShape(StructureShape $structureShape): void
+    protected function visitStructureShape(StructureShape $shape): void
     {
-        if(count($structureShape->getMembers()) === 0) {
+        if(count($shape->getMembers()) === 0) {
             $this->debugLog('Skipped: empty StructureShape');
-        } else if($this->context->registerClass($structureShape)) {
+        } else if($this->context->registerClass($shape)) {
             $this->debugLog('Skipped: already visited');
         } else {
-            foreach ($structureShape->getMembers() as $shape) {
-                $this->visitModel($shape);
+            foreach ($shape->getMembers() as $member) {
+                $this->visitModel($member);
             }
         }
     }
 
-    protected function visitShape(Shape $shape): void
+    protected function visitMapShape(MapShape $shape): void
     {
-        if($shape instanceof StructureShape) {
-            $this->visitModel($shape);
-        } else if($shape instanceof ListShape) {
-            $this->context->registerClass($shape);
-            $member = $shape->getMember();
-            if($member instanceof StructureShape) {
-                $this->visitModel($member);
-            }
-        } else if($shape instanceof MapShape) {
-            $this->context->registerClass($shape);
-            $this->visitModel($shape->getValue());
-        } else {
-            $this->debugLog(sprintf('Did nothing: %s (%s) ', $this->nameResolver->resolve($shape), get_class($shape)));
-        }
+        $this->context->registerClass($shape);
+        $this->visitModel($shape->getValue());
+    }
+
+    protected function visitListShape(ListShape $shape): void
+    {
+        $this->context->registerClass($shape);
+        $this->visitModel($shape->getMember());
     }
 
     protected function createClassGeneratorForHash(string $hash): ClassGenerator
@@ -294,99 +288,105 @@ class Generator implements LoggerAwareInterface
 
     protected function applyListShape(ClassGenerator $cls, ListShape $shape, array $options): void
     {
-        $member = $shape->getMember();
+        $this->applyMapOrListMember($cls, $member = $shape->getMember(), $options);
 
-        $this->applyInterfaces($cls, '\IteratorAggregate', '\ArrayAccess', '\Countable');
-
-        if($member instanceof StructureShape) {
-            $body = sprintf(
-                'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
-                $this->namespace,
-                $this->resolveFqcn($member)
-            );
+        if($this->isPhpType($member)) {
+            $type = $this->resolvePhpType($member);
+            $body = "\$this->data[] = \$value;\nreturn \$this;";
         } else {
-           $body = 'return new \ArrayIterator($this->data);';
+            $type = $this->resolveFqcn($member);
+            $body = "\$this->data[] = \$value->toArray();\nreturn \$this;";
         }
 
-        $cls->addMethodFromGenerator(
-            MethodGenerator::fromArray([
-                'name' => 'getIterator',
-                'body' =>  $body
-            ])
-        );
+        $this->applyMethod($cls, [
+            'name' => 'add',
+            'body' => $body,
+            'parameters' =>$this->createParameterGenerators(
+                ['name' => 'value', 'type' => $type]
+            )
+        ]);
     }
 
     protected function applyMapShape(ClassGenerator $cls, MapShape $shape, array $options): void
     {
-        $member = $shape->getValue();
+        $this->applyMapOrListMember($cls, $value = $shape->getValue(), $options);
+
+        if($this->isPhpType($value)) {
+            $type = $this->resolvePhpType($value);
+            $body = "\$this->data[\$key] = \$value;\nreturn \$this;";
+
+        } else {
+            $type = $this->resolveFqcn($value);
+            $body = "\$this->data[\$key] = \$value->toArray();\nreturn \$this;";
+
+        }
+
+        $this->applyMethod($cls, [
+            'name' => 'add',
+            'body' => $body,
+            'parameters' =>$this->createParameterGenerators(
+                ['name' => 'key', 'type' => $this->resolvePhpType($shape->getKey())],
+                ['name' => 'value', 'type' => $type]
+            )
+        ]);
+    }
+
+    protected function applyMapOrListMember(ClassGenerator $cls, Shape $member, array $options): void
+    {
         $this->applyInterfaces($cls, '\IteratorAggregate', '\ArrayAccess', '\Countable');
 
-        if($member instanceof StructureShape) {
+        if($this->isPhpType($member)) {
+            $body = 'return new \ArrayIterator($this->data);';
+        } else {
             $body = sprintf(
                 'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
                 $this->namespace,
                 $this->resolveFqcn($member)
             );
-        } else {
-            $body = 'return new \ArrayIterator($this->data);';
         }
 
-        $cls->addMethodFromGenerator(
-            MethodGenerator::fromArray([
-                'name' => 'getIterator',
-                'body' =>  $body
-            ])
-        );
-
+        $this->applyMethod($cls, [
+            'name' => 'getIterator',
+            'body' =>  $body
+        ]);
     }
 
     protected function applyMember(ClassGenerator $cls, Shape $shape, string $memberName, Shape $member, array $options): void
     {
         $required = $options['required'] ?? false;
 
+        $fqcn = $this->resolveFqcn($member);
+
+
         if($member instanceof StructureShape) {
-            $fqcn = $this->resolveFqcn($member);
+            //structure is always a class
             $docTypes = $required ? ['null', $fqcn] : [$fqcn];
             $returnType = ($required ? '' : '?') . $fqcn;
 
             $getBody = sprintf("return \$this['%s'] ? new %s(\$this['%s']) : null;", $memberName, $fqcn, $memberName);
             $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
 
-        } else if($member instanceof ListShape) {
-            $fqcn = $this->resolveFqcn($member);
-            $listMember = $member->getMember();
-            if($listMember instanceof StructureShape) {
-                $docTypes = ['array', $fqcn, $this->resolveFqcn($member->getMember()) . '[]'];
+        } else if($member instanceof ListShape || $member instanceof MapShape) {
+            //list+map may be an array of class or an array of php types
+            $innerMember = $member instanceof ListShape ? $member->getMember() : $member->getValue();
+
+            if($this->isPhpType($innerMember)) {
+                $phpType = $this->resolvePhpType($innerMember);
+                $docTypes = [$phpType .'[]'];
+                $returnType = 'array';
+
+                $getBody = sprintf("return new \$this['%s'];", $memberName);
+                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
+            } else {
+                $docTypes = ['array', $fqcn, $this->resolveFqcn($innerMember) . '[]'];
                 $returnType = $fqcn;
 
                 $getBody = sprintf("return new %s(\$this['%s'] ?? []);", $fqcn, $memberName);
                 $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
-            } else if($listMember instanceof MapShape) {
-
-                $docTypes = ['array'];
-                $returnType = 'array';
-
-                $getBody = sprintf("return \$this['%s'];", $memberName);
-                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
-
-            } else {
-                $phpType = $this->resolvePhpType($listMember);
-                $docTypes = [$phpType .'[]'];
-                $returnType = 'array';
-
-                $getBody = sprintf("return \$this['%s'];", $memberName);
-                $setBody = sprintf("\$this['%s'] = \$value;\nreturn \$this;", $memberName);
             }
 
-        } else if($member instanceof MapShape) {
-            $fqcn = $this->resolveFqcn($member);
-            $docTypes = ['array', $this->resolveFqcn($member->getValue()) . '[]'];
-            $returnType = 'array';
-
-            $getBody = '//todo';
-            $setBody = '//todo';
-
         } else {
+            //if its not struct or list or map, its a php type
             $phpType = $this->resolvePhpType($member);
             $docTypes = $required ? ['null', $phpType] : [$phpType];
             $returnType = ($required ? '' : '?') . $phpType;
@@ -407,17 +407,16 @@ class Generator implements LoggerAwareInterface
     protected function applyGetter(ClassGenerator $cls, string $name, string $returnType, array $docTypes, string $body, array $options): void
     {
         if(null !== $prefix = $options['getPrefix'] ?? null) {
-            $cls->addMethodFromGenerator(
-                MethodGenerator::fromArray([
+            $this->applyMethod($cls, [
                     'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
                     'returnType' => $returnType,
                     'body' =>  $body,
-                    'docBlock' => DocBlockGenerator::fromArray([
+                    'docBlock' => [
                         'tags' => [
                             new ReturnTag($docTypes)
                         ]
-                    ])->setWordWrap(false)
-                ])
+                    ]
+                ]
             );
         }
     }
@@ -425,23 +424,30 @@ class Generator implements LoggerAwareInterface
     protected function applySetter(ClassGenerator $cls, string $name, string $returnType, array $docTypes, string $body, array $options): void
     {
         if(null !== $prefix = $options['setPrefix'] ?? null) {
-            $cls->addMethodFromGenerator(
-                MethodGenerator::fromArray([
-                    'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
-                    'parameters' => [ParameterGenerator::fromArray([
-                        'name' => 'value',
-                        'type' => $returnType,
-                    ])],
-                    'body' => $body,
-                    'docBlock' => DocBlockGenerator::fromArray([
-                        'tags' => [
-                            new VarTag(null, $docTypes),
-                            new ReturnTag('static')
-                        ]
-                    ])->setWordWrap(false)
-                ])
-            );
+            $this->applyMethod($cls, [
+                'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
+                'parameters' => $this->createParameterGenerators([
+                    'name' => 'value',
+                    'type' => $returnType,
+                ]),
+                'body' => $body,
+                'docBlock' => [
+                    'tags' => [
+                        new VarTag(null, $docTypes),
+                        new ReturnTag('static')
+                    ]
+                ]
+            ]);
         }
+    }
+
+    protected function applyMethod(ClassGenerator $cls, array $spec): MethodGenerator
+    {
+        if(is_array($spec['docBlock'] ?? null)) {
+            $spec['docBlock'] = DocBlockGenerator::fromArray($spec['docBlock'])->setWordWrap(false);
+        }
+        $cls->addMethodFromGenerator($gen = MethodGenerator::fromArray($spec));
+        return $gen;
     }
 
     protected function applyInterfaces(ClassGenerator $cls, string ...$interfaces)
@@ -531,19 +537,29 @@ class Generator implements LoggerAwareInterface
         return $classes;
     }
 
-    protected function createClassGenerator(array $params, string $type = ClassGenerator::class): ClassGenerator
+    protected function createClassGenerator(array $spec, string $type = ClassGenerator::class): ClassGenerator
     {
-        $cls = call_user_func([$type, 'fromArray'], $params);
+        $cls = call_user_func([$type, 'fromArray'], $spec);
 
-        if($interfaces = $params['interfaces'] ?? null) {
+        if($interfaces = $spec['interfaces'] ?? null) {
             $this->applyInterfaces($cls, ...$interfaces);
         }
 
-        if($params['hasDataTrait'] ?? false) {
+        if($spec['hasDataTrait'] ?? false) {
             $this->applyHasDataTrait($cls);
         }
         $this->createFileGeneratorForClassGenerator($cls);
         return $cls;
+    }
+
+    protected function createParameterGenerators(array ...$specs): array
+    {
+        return array_map([$this, 'createParameterGenerator'], $specs);
+    }
+
+    protected function createParameterGenerator(array $spec): ParameterGenerator
+    {
+        return ParameterGenerator::fromArray($spec);
     }
 
     protected function resolveNamespace(AbstractModel $model): string
@@ -578,6 +594,11 @@ class Generator implements LoggerAwareInterface
             default:
                 throw new \LogicException('TODO resolvePhpType: '. $type);
         }
+    }
+
+    protected function isPhpType(Shape $shape): bool
+    {
+        return !in_array($shape->getType(), ['list', 'map', 'structure']);
     }
 
     protected function debugEnter(AbstractModel $model): void

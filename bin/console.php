@@ -2,13 +2,13 @@
 
 namespace Rtek\AwsGen;
 
-use Aws\Api\AbstractModel;
-use Aws\Api\Operation;
-use Aws\Api\Service;
+
+use Dev\DynamoDb\DynamoDbClient;
+use Dev\DynamoDb\ListTablesInput;
 use Dev\DynamoDbStreams\DynamoDbStreamsClient;
 use Dev\DynamoDbStreams\ListStreamsInput;
+
 use Psr\Log\AbstractLogger;
-use Rtek\AwsGen\Generator\Context;
 
 chdir(dirname(__DIR__));
 require_once 'vendor/autoload.php';
@@ -30,15 +30,9 @@ $gen->setLogger(new class extends AbstractLogger {
     }
 });
 
-$gen->addServices([
-        'ec2' => 'latest',
-        'dynamodb' => 'latest',
-        'streams.dynamodb' => 'latest',
-    ])->setNamespace('Dev');
-
-/*$gen->setFilter(function(AbstractModel $model, Context $context) {
-    return $model instanceof Service || ($model instanceof Operation && $model['name'] === 'ListStreams') || $context->getOperation();
-});*/
+$gen->addService('dynamodb')
+    ->addService('streams.dynamodb')
+    ->setNamespace('Dev');
 
 $out = 'data/tmp/output/';
 foreach($gen() as $cls) {
@@ -54,12 +48,12 @@ foreach($gen() as $cls) {
 
 $config = require 'config.php';
 
-$client = new DynamoDbStreamsClient($config['aws']);
+$client = new DynamoDbClient($config['aws']);
 
-$input = ListStreamsInput::create()->Limit(10)->TableName('obvius_logs');
-$output =  $client->listStreams($input);
+$input = ListTablesInput::create();
+$output =  $client->listTables($input);
 
-foreach($output->Streams() as $stream) {
-    var_dump($stream->getTableName());
+foreach($output->tableNames() as $tableName) {
+    var_dump($tableName);
 }
 

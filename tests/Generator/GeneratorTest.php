@@ -2,10 +2,14 @@
 
 namespace Rtek\AwsGen\Tests\Generator;
 
+use Aws\Api\AbstractModel;
+use Aws\Api\Operation;
+use Aws\Api\Service;
 use function Aws\manifest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
+use Rtek\AwsGen\Generator\Context;
 use Rtek\AwsGen\Generator\Generator;
 
 class GeneratorTest extends TestCase
@@ -23,7 +27,7 @@ class GeneratorTest extends TestCase
     {
         $this->markTestSkipped();
 
-        $this->applyLogger(LogLevel::INFO);
+        //$this->applyLogger(LogLevel::INFO);
 
         $this->generator->setNamespace('All');
 
@@ -32,19 +36,38 @@ class GeneratorTest extends TestCase
         }
 
         $this->generate();
+
+
     }
 
-    public function testConflicts(): void
+    public function testMapShape(): void
     {
-        //$this->markTestSkipped();
+       // $this->markTestSkipped();
+
         $this->applyLogger(LogLevel::DEBUG);
 
-        $this->generator->setNamespace('Conflict');
+        $this->generator->setNamespace('MapShape')
+            ->addService('dynamodb')
+            ->setFilter(function(Operation $operation, Context $context) {
+                return  $operation['name'] === 'BatchGetItem';
+            });
 
-        $all = manifest();
-        foreach (['apigateway'] as $name) {
-            $this->generator->addService($name);
-        }
+
+        $this->generate();
+    }
+
+    public function testListOfString(): void
+    {
+        $this->markTestSkipped();
+
+        $this->applyLogger(LogLevel::DEBUG);
+
+        $this->generator->setNamespace('ListOfString')
+            ->addService('apigateway')
+            ->setFilter(function(Operation $operation, Context $context) {
+                return true;// $operation['name'] === 'BatchGetItem';
+            });
+
 
         $this->generate();
     }
@@ -55,16 +78,15 @@ class GeneratorTest extends TestCase
         $out = 'tests/_files/tmp/';
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($out, \RecursiveDirectoryIterator::SKIP_DOTS));
         foreach($files as $file) {
-            @unlink($file);
+            if($file->getExtension() === 'php') {
+                @unlink($file);
+            }
         }
 
         $gen = $this->generator;
         foreach($gen() as $cls) {
             $file = $cls->getContainingFileGenerator();
             $str = $file->generate();
-
-            echo memory_get_usage() . " {$file->getFilename()}\n";
-            ob_flush();
 
             @mkdir($out . dirname($file->getFilename()), 0777, true);
 
