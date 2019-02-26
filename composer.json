@@ -21,7 +21,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Rtek\\AwsGen\\Tests": "tests"
+            "Rtek\\AwsGen\\Tests\\": "tests"
         }
     }
 }
