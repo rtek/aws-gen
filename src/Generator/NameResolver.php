@@ -10,9 +10,12 @@ use Aws\Api\StructureShape;
 
 class NameResolver
 {
+    const EMPTY_STRUCTURE_SHAPE = 'EmptyStructureShape';
+
     /** @var Context */
     protected $context;
 
+    /** @var string[] */
     protected $names;
 
 
@@ -27,18 +30,13 @@ class NameResolver
         $raw = $this->raw($model);
 
         if(!isset($this->names[$raw])) {
-            if($model instanceof Service) {
-                $name = $this->service($model);
-            } else if($model instanceof Shape) {
-                $name = $this->shape($model);
-            } else  {
-                $name = $raw;
-            }
 
-            if (in_array($name, $this->names)) {
+            //some apis have case sensitive shapes and php class names are case insensitive
+            if (in_array($name = $raw, $this->names)) {
                 $name .= '_';
             }
 
+            //php keywords here
             switch (strtolower($name)) {
                 case 'function':
                 case 'namespace':
@@ -54,20 +52,26 @@ class NameResolver
         return $this->names[$raw];
     }
 
-    protected function raw(AbstractModel $model)
+    protected function raw(AbstractModel $model): string
     {
-        return $model['name'];
-    }
-
-    protected function shape(Shape $shape): string
-    {
-        if($shape instanceof StructureShape && count($shape->getMembers()) === 0) {
-            $name = 'EmptyStructureShape';
-        } else {
-            $name = ucfirst($shape['name']);
+        if($model instanceof Service) {
+            return $this->service($model);
+        } else if($model instanceof Shape) {
+            return $this->shape($model);
+        } else if($raw = $model['name']) {
+            return $raw;
         }
 
-        return $name;
+        throw new \LogicException("Could not get raw name");
+    }
+
+    protected function shape(Shape $shape): ?string
+    {
+        if($shape instanceof StructureShape && count($shape->getMembers()) === 0) {
+            return self::EMPTY_STRUCTURE_SHAPE;
+        }
+
+        return ucfirst($shape['name']);
     }
 
     protected function service(Service $service): string

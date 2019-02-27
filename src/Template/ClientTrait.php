@@ -13,9 +13,10 @@ trait ClientTrait
     public function __call($name, array $args)
     {
         $outputCls = null;
-        if (isset($args[0]) && $args[0] instanceof InputInterface) {
-            $outputCls = substr(get_class($args[0]), 0, -5) . 'Output';
-            $args[0] = $args[0]->toArray();
+        $input = $args[0] ?? null;
+        if ($input instanceof InputInterface) {
+            $outputCls = $input->getOutputClass();
+            $args[0] = $input->toArray();
         }
 
         /** @var \GuzzleHttp\Promise\Promise|\Aws\Result $result */

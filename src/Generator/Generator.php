@@ -207,7 +207,7 @@ class Generator implements LoggerAwareInterface
         } else if($model instanceof Shape) {
             if ($operation = $this->context->getClassOperation($hash)) {
                 if($model === $operation->getInput()) {
-                    return $this->createClassGeneratorForInput($model);
+                    return $this->createClassGeneratorForInput($model, $operation->getOutput());
                 } else if($model === $operation->getOutput()) {
                     return $this->createClassGeneratorForOutput($model);
                 }
@@ -218,10 +218,14 @@ class Generator implements LoggerAwareInterface
         }
     }
 
-    protected function createClassGeneratorForInput(Shape $shape): ClassGenerator
+    protected function createClassGeneratorForInput(Shape $shape, Shape $output): ClassGenerator
     {
         $cls = $this->createClassGeneratorForShape($shape, ['setPrefix' => '']);
         $cls->setExtendedClass($this->namespace .'\\AbstractInput');
+
+        if(NameResolver::EMPTY_STRUCTURE_SHAPE !== $name = $this->nameResolver->resolve($output)) {
+            $cls->addConstant('OUTPUT_CLASS', $this->resolveFqcn($output));
+        }
         return $cls;
     }
 
@@ -408,7 +412,7 @@ class Generator implements LoggerAwareInterface
     {
         if(null !== $prefix = $options['getPrefix'] ?? null) {
             $this->applyMethod($cls, [
-                    'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
+                    'name' => $prefix ? $prefix . ucfirst($name) : $name,
                     'returnType' => $returnType,
                     'body' =>  $body,
                     'docBlock' => [
@@ -425,7 +429,7 @@ class Generator implements LoggerAwareInterface
     {
         if(null !== $prefix = $options['setPrefix'] ?? null) {
             $this->applyMethod($cls, [
-                'name' => $prefix ? $prefix . ucfirst($name) : lcfirst($name),
+                'name' => $prefix ? $prefix . ucfirst($name) : $name,
                 'parameters' => $this->createParameterGenerators([
                     'name' => 'value',
                     'type' => $returnType,
@@ -443,11 +447,16 @@ class Generator implements LoggerAwareInterface
 
     protected function applyMethod(ClassGenerator $cls, array $spec): MethodGenerator
     {
+        $cls->addMethodFromGenerator($gen = $this->createMethodGenerator($spec));
+        return $gen;
+    }
+
+    protected function createMethodGenerator(array $spec): MethodGenerator
+    {
         if(is_array($spec['docBlock'] ?? null)) {
             $spec['docBlock'] = DocBlockGenerator::fromArray($spec['docBlock'])->setWordWrap(false);
         }
-        $cls->addMethodFromGenerator($gen = MethodGenerator::fromArray($spec));
-        return $gen;
+        return MethodGenerator::fromArray($spec);
     }
 
     protected function applyInterfaces(ClassGenerator $cls, string ...$interfaces)
@@ -517,15 +526,26 @@ class Generator implements LoggerAwareInterface
                 'flags' => ClassGenerator::FLAG_ABSTRACT,
                 'interfaces' => [$this->namespace .'\\InputInterface'],
                 'hasDataTrait' => true,
+                'constants' => [
+                    ['OUTPUT_CLASS', null]
+                ],
                 'methods' => [
-                    MethodGenerator::fromArray([
+                    $this->createMethodGenerator([
                         'name' => 'create',
                         'flags'=> MethodGenerator::FLAG_STATIC,
                         'body' => 'return new static();',
-                        'docBlock' => DocBlockGenerator::fromArray([
+                        'docBlock' => [
                             'tags' => [new ReturnTag('static')]
-                        ])->setWordWrap(false)
-                    ])
+                        ]
+                    ]),
+                    $this->createMethodGenerator([
+                        'name' => 'getOutputClass',
+                        'body' => 'return static::OUTPUT_CLASS;',
+                        'returnType' => 'string',
+                        'docBlock' => [
+                            'tags' => [new ReturnTag('string')]
+                        ]
+                    ]),
                 ],
             ])
         ];
@@ -539,6 +559,7 @@ class Generator implements LoggerAwareInterface
 
     protected function createClassGenerator(array $spec, string $type = ClassGenerator::class): ClassGenerator
     {
+        /** @var ClassGenerator $cls */
         $cls = call_user_func([$type, 'fromArray'], $spec);
 
         if($interfaces = $spec['interfaces'] ?? null) {
@@ -548,6 +569,10 @@ class Generator implements LoggerAwareInterface
         if($spec['hasDataTrait'] ?? false) {
             $this->applyHasDataTrait($cls);
         }
+
+        $cls->addConstants($spec['constants'] ?? []);
+
+
         $this->createFileGeneratorForClassGenerator($cls);
         return $cls;
     }
