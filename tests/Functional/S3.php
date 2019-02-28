@@ -5,6 +5,7 @@ namespace Rtek\AwsGen\Tests\Functional;
 
 use Func\S3\CreateBucketRequest;
 use Func\S3\GetObjectRequest;
+use Func\S3\HeadObjectRequest;
 use Func\S3\PutObjectRequest;
 use Func\S3\S3Client;
 use Rtek\AwsGen\Generator\Generator;
@@ -20,7 +21,7 @@ class S3 extends FunctionalTestCase
     /**
      * @doesNotPerformAssertions
      */
-    public function testGenerate()
+    public function testGenerate(): void
     {
         $generator = new Generator();
         $generator->setNamespace('Func')
@@ -40,7 +41,7 @@ class S3 extends FunctionalTestCase
      * @depends testGenerate
      * @doesNotPerformAssertions
      */
-    public function testCreateClient()
+    public function testCreateClient(): void
     {
         $config = require 'config.php';
         self::$client = new S3Client($config['aws']);
@@ -49,9 +50,9 @@ class S3 extends FunctionalTestCase
     /**
      * @depends testCreateClient
      */
-    public function testCreateBucket()
+    public function testCreateBucket(): void
     {
-        $input = CreateBucketRequest::create()->bucket(self::$bucket = 'test-'.md5(microtime()));
+        $input = CreateBucketRequest::create(self::$bucket = 'test-'.md5(microtime()));
 
         $output = self::$client->createBucket($input);
 
@@ -62,11 +63,9 @@ class S3 extends FunctionalTestCase
      * @depends testCreateBucket
      * @doesNotPerformAssertions
      */
-    public function testPutObject()
+    public function testPutObject(): string
     {
-        $input = PutObjectRequest::create()
-            ->Bucket(self::$bucket)
-            ->Key($key = date('c') . '.txt')
+        $input = PutObjectRequest::create(self::$bucket, $key = date('c') . '.txt')
             ->Body(date('c'));
 
         $output = self::$client->putObject($input);
@@ -78,16 +77,22 @@ class S3 extends FunctionalTestCase
      * @depends testPutObject
      * @param string $key
      */
-    public function testGetObject(string $key)
+    public function testGetObject(string $key): void
     {
-        $input = GetObjectRequest::create()
-            ->Bucket(self::$bucket)
-            ->Key($key);
+        $input = GetObjectRequest::create(self::$bucket, $key);
 
         $output = self::$client->getObject($input);
 
         $this->assertSame(explode('.', $key)[0], $output->Body());
+    }
 
+    /**
+     * @depends testPutObject
+     * @param string $key
+     */
+    public function testHeadObject(string $key): void
+    {
+       // $input = HeadObjectRequest::create()->Key()
     }
 
 

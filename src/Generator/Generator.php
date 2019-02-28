@@ -24,6 +24,7 @@ use Rtek\AwsGen\Template\InputInterface;
 use Rtek\AwsGen\Template\InputTrait;
 use Zend\Code\Generator\ClassGenerator;
 use Zend\Code\Generator\DocBlock\Tag\GenericTag;
+use Zend\Code\Generator\DocBlock\Tag\ParamTag;
 use Zend\Code\Generator\DocBlock\Tag\PropertyTag;
 use Zend\Code\Generator\DocBlock\Tag\ReturnTag;
 use Zend\Code\Generator\DocBlock\Tag\VarTag;
@@ -218,7 +219,7 @@ class Generator implements LoggerAwareInterface
         }
     }
 
-    protected function createClassGeneratorForInput(Shape $shape, Shape $output): ClassGenerator
+    protected function createClassGeneratorForInput(StructureShape $shape, Shape $output): ClassGenerator
     {
         $cls = $this->createClassGeneratorForShape($shape, ['setPrefix' => '']);
         $cls->setExtendedClass($this->namespace .'\\AbstractInput');
@@ -226,6 +227,44 @@ class Generator implements LoggerAwareInterface
         if(NameResolver::EMPTY_STRUCTURE_SHAPE !== $name = $this->nameResolver->resolve($output)) {
             $cls->addConstant('OUTPUT_CLASS', $this->resolveFqcn($output));
         }
+
+        //foreach required member... add it to create()
+        $params = [];
+        foreach(array_intersect_key($shape->getMembers(), array_flip($shape['required'] ?? [])) as $name => $member) {
+            $params[] = $this->createParameterGenerator([
+                'name' => $name,
+                'type' => $this->resolveType($member)
+            ]);
+        }
+
+        if(count($params) > 0) {
+            $setters = array_map(function(ParameterGenerator $param) {
+                return sprintf('->%s($%s)', $param->getName(), $param->getName());
+            }, $params);
+
+            $body = sprintf('return (new static())%s;', implode('', $setters));
+
+            $tags = array_map(function(ParameterGenerator $param) {
+                return new ParamTag($param->getName(), $param->getType());
+            }, $params);
+
+        } else {
+            $body = 'return new static();';
+            $tags = [];
+        }
+
+        $tags[] = new ReturnTag('static');
+        $this->applyMethod($cls,[
+            'name' => 'create',
+            'flags'=> MethodGenerator::FLAG_STATIC,
+            'parameters' => $params,
+            'body' => $body,
+            'docBlock' => [
+                'tags' => $tags
+            ]
+        ]);
+
+
         return $cls;
     }
 
@@ -531,14 +570,6 @@ class Generator implements LoggerAwareInterface
                 ],
                 'methods' => [
                     $this->createMethodGenerator([
-                        'name' => 'create',
-                        'flags'=> MethodGenerator::FLAG_STATIC,
-                        'body' => 'return new static();',
-                        'docBlock' => [
-                            'tags' => [new ReturnTag('static')]
-                        ]
-                    ]),
-                    $this->createMethodGenerator([
                         'name' => 'getOutputClass',
                         'body' => 'return static::OUTPUT_CLASS;',
                         'returnType' => 'string',
@@ -624,6 +655,11 @@ class Generator implements LoggerAwareInterface
     protected function isPhpType(Shape $shape): bool
     {
         return !in_array($shape->getType(), ['list', 'map', 'structure']);
+    }
+
+    protected function resolveType(Shape $shape): string
+    {
+        return $this->isPhpType($shape) ? $this->resolvePhpType($shape) : $this->resolveFqcn($shape);
     }
 
     protected function debugEnter(AbstractModel $model): void
