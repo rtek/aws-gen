@@ -13,6 +13,7 @@ use Aws\Api\Shape;
 use Aws\Api\StructureShape;
 use Aws\AwsClient;
 use function Aws\manifest;
+use Aws\Result;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
@@ -528,7 +529,8 @@ class Generator implements LoggerAwareInterface
                 $paramTypes[] = $this->resolveFqcn($input);
             }
 
-            $returnType = $this->resolveFqcn($operation->getOutput());
+            $output = $operation->getOutput();
+            $returnType = $this->nameResolver->resolve($output) === NameResolver::EMPTY_STRUCTURE_SHAPE ? '\Aws\Result' : $this->resolveFqcn($output);
 
             $docs->setTags([
                 new GenericTag('method',
@@ -572,9 +574,9 @@ class Generator implements LoggerAwareInterface
                     $this->createMethodGenerator([
                         'name' => 'getOutputClass',
                         'body' => 'return static::OUTPUT_CLASS;',
-                        'returnType' => 'string',
+                        'returnType' => '?string',
                         'docBlock' => [
-                            'tags' => [new ReturnTag('string')]
+                            'tags' => [new ReturnTag('string|null')]
                         ]
                     ]),
                 ],

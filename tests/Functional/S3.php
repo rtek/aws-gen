@@ -4,19 +4,26 @@
 namespace Rtek\AwsGen\Tests\Functional;
 
 use Func\S3\CreateBucketRequest;
+use Func\S3\DeleteBucketRequest;
+use Func\S3\DeleteObjectRequest;
 use Func\S3\GetObjectRequest;
 use Func\S3\HeadObjectRequest;
+use Func\S3\ListObjectsRequest;
+use Func\S3\ListObjectsV2Request;
 use Func\S3\PutObjectRequest;
 use Func\S3\S3Client;
 use Rtek\AwsGen\Generator\Generator;
 
 class S3 extends FunctionalTestCase
 {
-    /** @var string */
-    static protected $bucket;
+    static protected $cleanup = [];
 
-    /** @var S3Client */
-    static protected $client;
+    static public function tearDownAfterClass()
+    {
+        while(is_callable($fn = array_pop(static::$cleanup))) {
+            call_user_func($fn);
+        }
+    }
 
     /**
      * @doesNotPerformAssertions
@@ -40,60 +47,91 @@ class S3 extends FunctionalTestCase
     /**
      * @depends testGenerate
      * @doesNotPerformAssertions
+     * @return S3Client
      */
-    public function testCreateClient(): void
+    public function testCreateClient(): S3Client
     {
         $config = require 'config.php';
-        self::$client = new S3Client($config['aws']);
+        return new S3Client($config['aws']);
     }
 
     /**
      * @depends testCreateClient
+     * @param S3Client $client
      */
-    public function testCreateBucket(): void
+    public function testCreateBucket(S3Client $client): string
     {
-        $input = CreateBucketRequest::create(self::$bucket = 'test-'.md5(microtime()));
+        $config = require 'config.php';
+        $bucket = $config['test_bucket'];
+        $input = CreateBucketRequest::create($bucket);
 
-        $output = self::$client->createBucket($input);
+        $output = $client->createBucket($input);
 
-        $this->assertSame('/'.self::$bucket, $output->Location());
+        $this->assertSame('/'.$bucket, $output->Location());
+
+        self::$cleanup[] = function() use($client, $bucket) {
+            $objects = $client->listObjectsV2(ListObjectsV2Request::create($bucket));
+
+            foreach($objects->Contents() as $object) {
+                $client->deleteObject(DeleteObjectRequest::create($bucket, $object->getKey()));
+            }
+            $input = DeleteBucketRequest::create($bucket);
+            $client->deleteBucket($input);
+        };
+
+        return $bucket;
     }
 
     /**
+     * @depends testCreateClient
      * @depends testCreateBucket
      * @doesNotPerformAssertions
+     * @param S3Client $client
+     * @param string $bucket
      */
-    public function testPutObject(): string
+    public function testPutObject(S3Client $client, string $bucket): string
     {
-        $input = PutObjectRequest::create(self::$bucket, $key = date('c') . '.txt')
-            ->Body(date('c'));
+        $input = PutObjectRequest::create($bucket, $key = date('c') . '.txt')
+            ->Body(date('c'))
+            ->ContentType('text/plain');
 
-        $output = self::$client->putObject($input);
+        $output = $client->putObject($input);
+
         return $key;
     }
 
 
     /**
+     * @depends testCreateClient
+     * @depends testCreateBucket
      * @depends testPutObject
+     * @param S3Client $client
+     * @param string $bucket
      * @param string $key
      */
-    public function testGetObject(string $key): void
+    public function testGetObject(S3Client $client, string $bucket, string $key): void
     {
-        $input = GetObjectRequest::create(self::$bucket, $key);
+        $input = GetObjectRequest::create($bucket, $key);
 
-        $output = self::$client->getObject($input);
+        $output = $client->getObject($input);
 
         $this->assertSame(explode('.', $key)[0], $output->Body());
     }
 
     /**
+     * @depends testCreateClient
+     * @depends testCreateBucket
      * @depends testPutObject
+     * @param S3Client $client
+     * @param string $bucket
      * @param string $key
      */
-    public function testHeadObject(string $key): void
+    public function testHeadObject(S3Client $client, string $bucket, string $key): void
     {
-       // $input = HeadObjectRequest::create()->Key()
+       $input = HeadObjectRequest::create($bucket, $key);
+
+       $output = $client->headObject($input);
+
+       $this->assertSame('text/plain', $output->ContentType());
     }
-
-
 }

@@ -11,7 +11,8 @@
         "psr/log": "^1.1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^7.5"
+        "phpunit/phpunit": "^7.0|^8.0",
+        "zendframework/zend-coding-standard": "^1.0"
     },
 
     "autoload": {
@@ -23,5 +24,9 @@
         "psr-4": {
             "Rtek\\AwsGen\\Tests\\": "tests"
         }
+    },
+    "scripts": {
+        "cs-check": "phpcs",
+        "cs-fix": "phpcbf"
     }
 }
