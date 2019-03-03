@@ -65,13 +65,13 @@ class Context implements LoggerAwareInterface
 
     public function registerClass(AbstractModel $model): bool
     {
-        if($model instanceof Shape && !$this->operation) {
+        if ($model instanceof Shape && !$this->operation) {
             throw new \LogicException('Cannot register shape from outside operation context');
         }
 
         $hash = $this->hash($model);
 
-        if(!$exists = isset($this->classes[$hash])) {
+        if (!$exists = isset($this->classes[$hash])) {
             $this->classes[$hash] = [
                 'model' => $model,
                 'contexts' => [],
@@ -88,21 +88,21 @@ class Context implements LoggerAwareInterface
 
     public function hash(AbstractModel $model): string
     {
-         if($model instanceof StructureShape) {
+        if ($model instanceof StructureShape) {
             $toHash = [$model['name']];
-            foreach($model->getMembers() as $member) {
+            foreach ($model->getMembers() as $member) {
                 $toHash[] = $member->toArray();
             }
-        } else if($model instanceof ListShape) {
+        } elseif ($model instanceof ListShape) {
+            $toHash = [
+               $model->getName(),
+               $model->getMember()->toArray(),
+            ];
+        } elseif ($model instanceof MapShape) {
             $toHash = [
                 $model->getName(),
-                $model->getMember()->toArray(),
+                $model->getValue()->toArray(),
             ];
-        } else if($model instanceof MapShape) {
-             $toHash = [
-                 $model->getName(),
-                 $model->getValue()->toArray(),
-             ];
         } else {
             $toHash = $model->toArray();
         }
@@ -124,6 +124,4 @@ class Context implements LoggerAwareInterface
     {
         return $this->classes[$hash]['contexts'][0]['operation'] ?? null;
     }
-
-
 }

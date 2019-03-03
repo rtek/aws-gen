@@ -36,8 +36,6 @@ class GeneratorTest extends TestCase
         }
 
         $this->generate();
-
-
     }
 
     public function testMapShape(): void
@@ -48,7 +46,7 @@ class GeneratorTest extends TestCase
 
         $this->generator->setNamespace('MapShape')
             ->addService('dynamodb')
-            ->setFilter(function(Operation $operation, Context $context) {
+            ->setFilter(function (Operation $operation, Context $context) {
                 return  $operation['name'] === 'BatchGetItem';
             });
 
@@ -64,7 +62,7 @@ class GeneratorTest extends TestCase
 
         $this->generator->setNamespace('ListOfString')
             ->addService('apigateway')
-            ->setFilter(function(Operation $operation, Context $context) {
+            ->setFilter(function (Operation $operation, Context $context) {
                 return true;// $operation['name'] === 'BatchGetItem';
             });
 
@@ -77,20 +75,20 @@ class GeneratorTest extends TestCase
     {
         $out = 'tests/_files/tmp/';
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($out, \RecursiveDirectoryIterator::SKIP_DOTS));
-        foreach($files as $file) {
-            if($file->getExtension() === 'php') {
+        foreach ($files as $file) {
+            if ($file->getExtension() === 'php') {
                 @unlink($file);
             }
         }
 
         $gen = $this->generator;
-        foreach($gen() as $cls) {
+        foreach ($gen() as $cls) {
             $file = $cls->getContainingFileGenerator();
             $str = $file->generate();
 
             @mkdir($out . dirname($file->getFilename()), 0777, true);
 
-            if(file_exists($path = $out . $file->getFilename())) {
+            if (file_exists($path = $out . $file->getFilename())) {
                 echo "\n---EXISTING---\n";
                 echo $existing = file_get_contents($path);
                 echo "---NEW---\n";
@@ -108,22 +106,22 @@ class GeneratorTest extends TestCase
     {
         $this->generator->setLogger(new class($level) extends AbstractLogger {
             protected $allow = [];
-            public function __construct(string $level) {
-                foreach((new \ReflectionClass(LogLevel::class))->getConstants() as $name => $value) {
+            public function __construct(string $level)
+            {
+                foreach ((new \ReflectionClass(LogLevel::class))->getConstants() as $name => $value) {
                     $this->allow[] = $value;
-                    if($value === $level) {
+                    if ($value === $level) {
                         break;
                     }
                 }
             }
-            public function log($level, $message, array $context = []) {
-                if(in_array($level, $this->allow)) {
+            public function log($level, $message, array $context = [])
+            {
+                if (in_array($level, $this->allow)) {
                     echo $message . "\n";
                     ob_flush();
                 }
             }
         });
     }
-
-
 }

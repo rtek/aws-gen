@@ -8,4 +8,3 @@ interface InputInterface
 
     public function getOutputClass(): ?string;
 }
-

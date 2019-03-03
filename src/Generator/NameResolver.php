@@ -29,8 +29,7 @@ class NameResolver
     {
         $raw = $this->raw($model);
 
-        if(!isset($this->names[$raw])) {
-
+        if (!isset($this->names[$raw])) {
             //some apis have case sensitive shapes and php class names are case insensitive
             if (in_array($name = $raw, $this->names)) {
                 $name .= '_';
@@ -43,7 +42,6 @@ class NameResolver
                 case 'parent':
                 case 'trait':
                     $name .= '_';
-
             }
 
             $this->names[$raw] = $name;
@@ -54,11 +52,11 @@ class NameResolver
 
     protected function raw(AbstractModel $model): string
     {
-        if($model instanceof Service) {
+        if ($model instanceof Service) {
             return $this->service($model);
-        } else if($model instanceof Shape) {
+        } elseif ($model instanceof Shape) {
             return $this->shape($model);
-        } else if($raw = $model['name']) {
+        } elseif ($raw = $model['name']) {
             return $raw;
         }
 
@@ -67,7 +65,7 @@ class NameResolver
 
     protected function shape(Shape $shape): ?string
     {
-        if($shape instanceof StructureShape && count($shape->getMembers()) === 0) {
+        if ($shape instanceof StructureShape && count($shape->getMembers()) === 0) {
             return self::EMPTY_STRUCTURE_SHAPE;
         }
 
@@ -76,14 +74,14 @@ class NameResolver
 
     protected function service(Service $service): string
     {
-        if(!$name = $service->getMetadata('namespace')) {
+        if (!$name = $service->getMetadata('namespace')) {
             $name = $service->getMetadata('targetPrefix');
 
-            if(stripos($name, 'DynamoDBStreams') !== false) {
+            if (stripos($name, 'DynamoDBStreams') !== false) {
                 $name = 'DynamoDbStreams';
-            } else if(stripos($name, 'DynamoDB') !== false) {
+            } elseif (stripos($name, 'DynamoDB') !== false) {
                 $name = 'DynamoDb';
-            } else if(stripos($name, 'signer') !== false) {
+            } elseif (stripos($name, 'signer') !== false) {
                 $name = 'Singer';
             }
         }

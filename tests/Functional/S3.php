@@ -16,11 +16,11 @@ use Rtek\AwsGen\Generator\Generator;
 
 class S3 extends FunctionalTestCase
 {
-    static protected $cleanup = [];
+    protected static $cleanup = [];
 
-    static public function tearDownAfterClass()
+    public static function tearDownAfterClass()
     {
-        while(is_callable($fn = array_pop(static::$cleanup))) {
+        while (is_callable($fn = array_pop(static::$cleanup))) {
             call_user_func($fn);
         }
     }
@@ -35,7 +35,7 @@ class S3 extends FunctionalTestCase
             ->addService('s3');
 
         $out = 'tests/_files/tmp/';
-        foreach($generator() as $cls) {
+        foreach ($generator() as $cls) {
             $file = $cls->getContainingFileGenerator();
             $str = $file->generate();
             @mkdir($out . dirname($file->getFilename()), 0777, true);
@@ -67,12 +67,12 @@ class S3 extends FunctionalTestCase
 
         $output = $client->createBucket($input);
 
-        $this->assertSame('/'.$bucket, $output->Location());
+        $this->assertSame('/' . $bucket, $output->Location());
 
-        self::$cleanup[] = function() use($client, $bucket) {
+        self::$cleanup[] = function () use ($client, $bucket) {
             $objects = $client->listObjectsV2(ListObjectsV2Request::create($bucket));
 
-            foreach($objects->Contents() as $object) {
+            foreach ($objects->Contents() as $object) {
                 $client->deleteObject(DeleteObjectRequest::create($bucket, $object->getKey()));
             }
             $input = DeleteBucketRequest::create($bucket);
@@ -128,10 +128,10 @@ class S3 extends FunctionalTestCase
      */
     public function testHeadObject(S3Client $client, string $bucket, string $key): void
     {
-       $input = HeadObjectRequest::create($bucket, $key);
+        $input = HeadObjectRequest::create($bucket, $key);
 
-       $output = $client->headObject($input);
+        $output = $client->headObject($input);
 
-       $this->assertSame('text/plain', $output->ContentType());
+        $this->assertSame('text/plain', $output->ContentType());
     }
 }

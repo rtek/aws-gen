@@ -35,4 +35,3 @@ trait ClientTrait
         return $result;
     }
 }
-
