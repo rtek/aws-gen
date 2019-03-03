@@ -1,5 +1,4 @@
-<?php
-
+<?php declare(strict_types=1);
 
 namespace Rtek\AwsGen\Generator;
 
@@ -11,22 +10,16 @@ use Aws\Api\Operation;
 use Aws\Api\Service;
 use Aws\Api\Shape;
 use Aws\Api\StructureShape;
-use Aws\AwsClient;
-use function Aws\manifest;
-use Aws\Result;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
 use Rtek\AwsGen\Exception\GeneratorException;
-use Rtek\AwsGen\Template\AbstractInput;
 use Rtek\AwsGen\Template\ClientTrait;
 use Rtek\AwsGen\Template\CreateObjectIterator;
 use Rtek\AwsGen\Template\InputInterface;
-use Rtek\AwsGen\Template\InputTrait;
 use Zend\Code\Generator\ClassGenerator;
 use Zend\Code\Generator\DocBlock\Tag\GenericTag;
 use Zend\Code\Generator\DocBlock\Tag\ParamTag;
-use Zend\Code\Generator\DocBlock\Tag\PropertyTag;
 use Zend\Code\Generator\DocBlock\Tag\ReturnTag;
 use Zend\Code\Generator\DocBlock\Tag\VarTag;
 use Zend\Code\Generator\DocBlockGenerator;
@@ -34,10 +27,9 @@ use Zend\Code\Generator\FileGenerator;
 use Zend\Code\Generator\InterfaceGenerator;
 use Zend\Code\Generator\MethodGenerator;
 use Zend\Code\Generator\ParameterGenerator;
-use Zend\Code\Generator\PropertyGenerator;
 use Zend\Code\Generator\TraitGenerator;
 use Zend\Code\Reflection\ClassReflection;
-use Zend\Code\Reflection\MethodReflection;
+use function Aws\manifest;
 
 class Generator implements LoggerAwareInterface
 {
@@ -282,7 +274,7 @@ class Generator implements LoggerAwareInterface
         return $cls;
     }
 
-    protected function applyHasDataTrait(ClassGenerator $cls):void
+    protected function applyHasDataTrait(ClassGenerator $cls): void
     {
         $cls->addTrait('\\Aws\\HasDataTrait');
         $cls->addMethodFromGenerator(MethodGenerator::fromArray([
@@ -630,7 +622,7 @@ class Generator implements LoggerAwareInterface
 
     protected function resolvePhpType(Shape $shape): string
     {
-        switch ($type = $shape['type']) {
+        switch ($type = (string)$shape['type']) {
             case 'string':
                 return $type;
             case 'timestamp':

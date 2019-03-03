@@ -1,8 +1,6 @@
-<?php
-
+<?php declare(strict_types=1);
 
 namespace Rtek\AwsGen\Generator;
-
 
 use Aws\Api\AbstractModel;
 use Aws\Api\ListShape;

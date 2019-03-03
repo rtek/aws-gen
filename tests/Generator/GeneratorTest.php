@@ -1,16 +1,16 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace Rtek\AwsGen\Tests\Generator;
 
 use Aws\Api\AbstractModel;
 use Aws\Api\Operation;
 use Aws\Api\Service;
-use function Aws\manifest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Rtek\AwsGen\Generator\Context;
 use Rtek\AwsGen\Generator\Generator;
+use function Aws\manifest;
 
 class GeneratorTest extends TestCase
 {
@@ -21,14 +21,15 @@ class GeneratorTest extends TestCase
     {
         ini_set('memory_limit', '512M');
         $this->generator = new Generator();
+
+        //$this->applyLogger(LogLevel::DEBUG);
     }
 
+    /**
+     * @doesNotPerformAssertions
+     */
     public function testEverything(): void
     {
-        $this->markTestSkipped();
-
-        //$this->applyLogger(LogLevel::INFO);
-
         $this->generator->setNamespace('All');
 
         foreach (manifest() as $name => $item) {
@@ -38,38 +39,19 @@ class GeneratorTest extends TestCase
         $this->generate();
     }
 
-    public function testMapShape(): void
+    /**
+     * @doesNotPerformAssertions
+     */
+    public function testOneThing(): void
     {
-       // $this->markTestSkipped();
-
-        $this->applyLogger(LogLevel::DEBUG);
-
-        $this->generator->setNamespace('MapShape')
-            ->addService('dynamodb')
+        $this->generator->setNamespace('One')
+            ->addService('s3')
             ->setFilter(function (Operation $operation, Context $context) {
-                return  $operation['name'] === 'BatchGetItem';
+                return true;
             });
-
 
         $this->generate();
     }
-
-    public function testListOfString(): void
-    {
-        $this->markTestSkipped();
-
-        $this->applyLogger(LogLevel::DEBUG);
-
-        $this->generator->setNamespace('ListOfString')
-            ->addService('apigateway')
-            ->setFilter(function (Operation $operation, Context $context) {
-                return true;// $operation['name'] === 'BatchGetItem';
-            });
-
-
-        $this->generate();
-    }
-
 
     protected function generate()
     {
@@ -77,7 +59,7 @@ class GeneratorTest extends TestCase
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($out, \RecursiveDirectoryIterator::SKIP_DOTS));
         foreach ($files as $file) {
             if ($file->getExtension() === 'php') {
-                @unlink($file);
+                @unlink((string)$file);
             }
         }
 

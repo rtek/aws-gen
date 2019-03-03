@@ -1,5 +1,4 @@
-<?php
-
+<?php declare(strict_types=1);
 
 namespace Rtek\AwsGen\Generator;
 
@@ -30,8 +29,13 @@ class NameResolver
         $raw = $this->raw($model);
 
         if (!isset($this->names[$raw])) {
+            if ($model instanceof Shape) {
+                $name = $this->shape($model);
+            } else {
+                $name = $raw;
+            }
             //some apis have case sensitive shapes and php class names are case insensitive
-            if (in_array($name = $raw, $this->names)) {
+            if (in_array($name, $this->names)) {
                 $name .= '_';
             }
 
@@ -52,12 +56,12 @@ class NameResolver
 
     protected function raw(AbstractModel $model): string
     {
-        if ($model instanceof Service) {
+        if ($raw = (string)$model['name']) {
+            return $raw;
+        } elseif ($model instanceof Service) {
             return $this->service($model);
         } elseif ($model instanceof Shape) {
             return $this->shape($model);
-        } elseif ($raw = $model['name']) {
-            return $raw;
         }
 
         throw new \LogicException("Could not get raw name");

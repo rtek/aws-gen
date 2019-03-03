@@ -11,6 +11,7 @@
 
     <rule ref="PSR12"/>
 
+
     <rule ref="Generic.Files.LineLength">
         <properties>
             <property name="lineLimit" value="150"/>
@@ -19,4 +20,16 @@
 
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
 
+    <config name="installed_paths" value="../../slevomat/coding-standard"/>
+
+
+    <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
+        <properties>
+            <property name="spacesCountAroundEqualsSign" value="0"/>
+        </properties>
+    </rule>
+    <rule ref="SlevomatCodingStandard.TypeHints.ReturnTypeHintSpacing"/>
+    <rule ref="SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses"/>
+    <rule ref="SlevomatCodingStandard.Namespaces.NamespaceSpacing"/>
+    <rule ref="SlevomatCodingStandard.TypeHints.NullTypeHintOnLastPosition"/>
 </ruleset>
