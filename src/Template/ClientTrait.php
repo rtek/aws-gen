@@ -2,6 +2,13 @@
 
 namespace Rtek\AwsGen\Template;
 
+use Aws\Result;
+
+/**
+ * Provides `InputInterface::toArray()` serialization and `InputInterface::getOutputClass()(Aws\Result::toArray())` unserialization
+ *
+ * The default `AwsClient` behavior occurs if `InputInterface` is not passed as the input argument
+ */
 trait ClientTrait
 {
     /**
@@ -18,13 +25,13 @@ trait ClientTrait
             $args[0] = $input->toArray();
         }
 
-        /** @var \GuzzleHttp\Promise\Promise|\Aws\Result $result */
+        /** @var \GuzzleHttp\Promise\Promise|Result $result */
         $result = parent::__call($name, $args);
 
         if ($outputCls) {
             if ($result instanceof \GuzzleHttp\Promise\Promise) {
-                $result = $result->then(function () {
-                    throw new \LogicException('todo');
+                $result = $result->then(function (Result $result) use ($outputCls) {
+                    return new $outputCls($result->toArray());
                 });
             } else {
                 $result = new $outputCls($result->toArray());

@@ -22,7 +22,7 @@ set_error_handler(function (int $severity, string $message, string $file, int $l
 });
 
 
-$gen = new Generator\Generator();
+$gen = new \Rtek\AwsGen\Generator();
 
 $gen->setLogger(new class extends AbstractLogger {
     public function log($level, $message, array $context = array()) {

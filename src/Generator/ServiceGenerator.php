@@ -3,7 +3,6 @@
 namespace Rtek\AwsGen\Generator;
 
 use Aws\Api\AbstractModel;
-use Aws\Api\ApiProvider;
 use Aws\Api\ListShape;
 use Aws\Api\MapShape;
 use Aws\Api\Operation;
@@ -13,33 +12,22 @@ use Aws\Api\StructureShape;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
-use Rtek\AwsGen\Exception\GeneratorException;
-use Rtek\AwsGen\Template\ClientTrait;
-use Rtek\AwsGen\Template\CreateObjectIterator;
-use Rtek\AwsGen\Template\InputInterface;
 use Zend\Code\Generator\ClassGenerator;
 use Zend\Code\Generator\DocBlock\Tag\GenericTag;
 use Zend\Code\Generator\DocBlock\Tag\ParamTag;
 use Zend\Code\Generator\DocBlock\Tag\ReturnTag;
 use Zend\Code\Generator\DocBlock\Tag\VarTag;
 use Zend\Code\Generator\DocBlockGenerator;
-use Zend\Code\Generator\FileGenerator;
-use Zend\Code\Generator\InterfaceGenerator;
 use Zend\Code\Generator\MethodGenerator;
 use Zend\Code\Generator\ParameterGenerator;
-use Zend\Code\Generator\TraitGenerator;
-use Zend\Code\Reflection\ClassReflection;
-use function Aws\manifest;
 
-class Generator implements LoggerAwareInterface
+class ServiceGenerator implements LoggerAwareInterface
 {
     use LoggerAwareTrait;
+    use GeneratorHelperTrait;
 
-    /** @var ApiProvider */
-    protected $provider;
-
-    /** @var Service[] */
-    protected $services;
+    /** @var Service */
+    protected $service;
 
     /** @var Context */
     protected $context;
@@ -55,25 +43,14 @@ class Generator implements LoggerAwareInterface
 
     protected $debugIndent = 0;
 
-    public function __construct(?ApiProvider $provider = null)
+    public function __construct(string $namespace, Service $service)
     {
-        $this->provider = $provider ?? ApiProvider::defaultProvider();
+        $this->namespace = trim($namespace, '\\');
+        $this->service = $service;
         $this->logger = new NullLogger();
         $this->filter = function () {
             return true;
         };
-        $this->nameResolver = new NameResolver();
-    }
-
-    /**
-     * @param string $namespace
-     * @return static
-     */
-    public function setNamespace(string $namespace)
-    {
-        $this->namespace = trim($namespace, '\\');
-        $this->logger->notice("Set namespace to: {$this->namespace}");
-        return $this;
     }
 
     /**
@@ -84,43 +61,19 @@ class Generator implements LoggerAwareInterface
         $this->filter = $filter;
     }
 
-    public function addService(string $name, string $version = 'latest')
-    {
-        if (!$api = ApiProvider::resolve($this->provider, 'api', $name, $version)) {
-            throw new GeneratorException("API does not exist '$name' at version '$version'");
-        }
-
-        $namespace = manifest($name)['namespace'];
-
-        if ($this->services[$namespace] ?? null) {
-            throw new GeneratorException("Service '$name' already added");
-        }
-
-        $api['metadata']['namespace'] = $namespace;
-        $this->services[$namespace] = new Service($api, $this->provider);
-
-        $this->logger->notice(sprintf('Added service: %s %s (%s) at namespace %s', $name, $version, $api['metadata']['protocol'], $namespace));
-
-        return $this;
-    }
-
     /**
      * @return \Generator|ClassGenerator[]
      */
     public function __invoke(): \Generator
     {
-        yield from new \ArrayIterator($this->createOtherClassGenerators());
+        $this->nameResolver = new NameResolver();
+        $this->context = new Context($this->service);
+        $this->context->setLogger($this->logger);
 
-        foreach ($this->services as $serviceName => $service) {
-            $this->context = new Context($service);
-            $this->context->setLogger($this->logger);
-            $this->nameResolver->setContext($this->context);
+        $this->visitModel($this->service);
 
-            $this->visitModel($service);
-
-            foreach ($this->context->getClassHashes() as $hash) {
-                yield $this->createClassGeneratorForHash($hash);
-            }
+        foreach ($this->context->getClassHashes() as $hash) {
+            yield $this->createClassGeneratorForHash($hash);
         }
     }
 
@@ -198,18 +151,59 @@ class Generator implements LoggerAwareInterface
 
         if ($model instanceof Service) {
             return $this->createClassGeneratorForService($model);
-        } elseif ($model instanceof Shape) {
+        }
+        if ($model instanceof Shape) {
             if ($operation = $this->context->getClassOperation($hash)) {
                 if ($model === $operation->getInput()) {
                     return $this->createClassGeneratorForInput($model, $operation->getOutput());
-                } elseif ($model === $operation->getOutput()) {
+                }
+                if ($model === $operation->getOutput()) {
                     return $this->createClassGeneratorForOutput($model);
                 }
             }
             return $this->createClassGeneratorForData($model);
-        } else {
-            throw new \LogicException('TODO: ' . get_class($model));
         }
+
+        throw new \LogicException('Unexpected shape class: ' . get_class($model));
+    }
+
+
+    protected function createClassGeneratorForService(Service $service): ClassGenerator
+    {
+        $name = $this->nameResolver->resolve($service);
+
+        $cls = $this->createClassGenerator([
+            'name' => $name . 'Client',
+            'namespaceName' => $namespace = $this->resolveNamespace($service),
+            'extendedClass' => "\\Aws\\$name\\{$name}Client",
+            'docBlock' => $docs = $this->createDocBlockGenerator()
+        ]);
+
+        $cls->addTrait("\\{$this->namespace}\\ClientTrait");
+
+        foreach ($service->getOperations() as $name => $operation) {
+            $paramTypes = ['array'];
+            $input = $operation->getInput();
+            if (count($input->getMembers()) > 0) {
+                $paramTypes[] = $this->resolveFqcn($input);
+            }
+
+            $output = $operation->getOutput();
+            $returnType = $this->nameResolver->resolve($output) === NameResolver::EMPTY_STRUCTURE_SHAPE ? '\Aws\Result' : $this->resolveFqcn($output);
+
+            $docs->setTags([
+                new GenericTag(
+                    'method',
+                    sprintf('%s %s(%s $input = [])', $returnType, lcfirst($name), implode($paramTypes, '|'))
+                ),
+                new GenericTag(
+                    'method',
+                    sprintf('\GuzzleHttp\Promise\Promise %sAsync(%s $input = [])', lcfirst($name), implode($paramTypes, '|'))
+                )
+            ]);
+        }
+
+        return $cls;
     }
 
     protected function createClassGeneratorForInput(StructureShape $shape, Shape $output): ClassGenerator
@@ -226,36 +220,31 @@ class Generator implements LoggerAwareInterface
         foreach (array_intersect_key($shape->getMembers(), array_flip($shape['required'] ?? [])) as $name => $member) {
             $params[] = $this->createParameterGenerator([
                 'name' => $name,
-                'type' => $this->resolveType($member)
+                'type' => $this->isPhpType($member) ? $this->resolvePhpType($member) : $this->resolveFqcn($member)
             ]);
         }
 
-        if (count($params) > 0) {
-            $setters = array_map(function (ParameterGenerator $param) {
-                return sprintf('->%s($%s)', $param->getName(), $param->getName());
-            }, $params);
+        $setters = array_map(function (ParameterGenerator $param) {
+            return sprintf('->%s($%s)', $param->getName(), $param->getName());
+        }, $params);
 
-            $body = sprintf('return (new static())%s;', implode('', $setters));
+        $body = sprintf('return (new static())%s;', implode('', $setters));
 
-            $tags = array_map(function (ParameterGenerator $param) {
-                return new ParamTag($param->getName(), $param->getType());
-            }, $params);
-        } else {
-            $body = 'return new static();';
-            $tags = [];
-        }
+        $tags = array_map(function (ParameterGenerator $param) {
+            return new ParamTag($param->getName(), $param->getType());
+        }, $params);
 
         $tags[] = new ReturnTag('static');
+
         $this->applyMethod($cls, [
             'name' => 'create',
             'flags' => MethodGenerator::FLAG_STATIC,
             'parameters' => $params,
             'body' => $body,
             'docBlock' => [
-                'tags' => $tags
-            ]
+                'tags' => $tags,
+            ],
         ]);
-
 
         return $cls;
     }
@@ -272,23 +261,6 @@ class Generator implements LoggerAwareInterface
         $cls = $this->createClassGeneratorForShape($shape, ['setPrefix' => 'set', 'getPrefix' => 'get']);
         $this->applyHasDataTrait($cls);
         return $cls;
-    }
-
-    protected function applyHasDataTrait(ClassGenerator $cls): void
-    {
-        $cls->addTrait('\\Aws\\HasDataTrait');
-        $cls->addMethodFromGenerator(MethodGenerator::fromArray([
-            'name' => '__construct',
-            'parameters' => [
-                ParameterGenerator::fromArray([
-                    'name' => 'data',
-                    'type' => 'array',
-                    'defaultValue' => []
-                ])
-            ],
-            'body' => '$this->data = $data;'
-        ]));
-        $this->applyInterfaces($cls, '\ArrayAccess');
     }
 
     protected function createClassGeneratorForShape(Shape $shape, array $options = []): ClassGenerator
@@ -472,152 +444,20 @@ class Generator implements LoggerAwareInterface
         }
     }
 
-    protected function applyMethod(ClassGenerator $cls, array $spec): MethodGenerator
-    {
-        $cls->addMethodFromGenerator($gen = $this->createMethodGenerator($spec));
-        return $gen;
-    }
-
-    protected function createMethodGenerator(array $spec): MethodGenerator
-    {
-        if (is_array($spec['docBlock'] ?? null)) {
-            $spec['docBlock'] = DocBlockGenerator::fromArray($spec['docBlock'])->setWordWrap(false);
-        }
-        return MethodGenerator::fromArray($spec);
-    }
-
-    protected function applyInterfaces(ClassGenerator $cls, string ...$interfaces)
-    {
-        $existing = $cls->getImplementedInterfaces();
-        foreach ($interfaces as $interface) {
-            $existing[] = $interface;
-        }
-        $cls->setImplementedInterfaces(array_unique($existing));
-    }
-
-    protected function createClassGeneratorForService(Service $service): ClassGenerator
-    {
-        $name = $this->nameResolver->resolve($service);
-
-        $cls = $this->createClassGenerator([
-            'name' => $name . 'Client',
-            'namespaceName' => $namespace = $this->resolveNamespace($service),
-            'extendedClass' => "\\Aws\\$name\\{$name}Client",
-            'docBlock' => $docs = (new DocBlockGenerator())->setWordWrap(false),
-        ]);
-
-        $cls->addTrait("\\{$this->namespace}\\ClientTrait");
-
-        foreach ($service->getOperations() as $name => $operation) {
-            $paramTypes = ['array'];
-            $input = $operation->getInput();
-            if (count($input->getMembers()) > 0) {
-                $paramTypes[] = $this->resolveFqcn($input);
-            }
-
-            $output = $operation->getOutput();
-            $returnType = $this->nameResolver->resolve($output) === NameResolver::EMPTY_STRUCTURE_SHAPE ? '\Aws\Result' : $this->resolveFqcn($output);
-
-            $docs->setTags([
-                new GenericTag(
-                    'method',
-                    sprintf('%s %s(%s $input = [])', $returnType, lcfirst($name), implode($paramTypes, '|'))
-                ),
-                new GenericTag(
-                    'method',
-                    sprintf('\GuzzleHttp\Promise\Promise %sAsync(%s $input = [])', lcfirst($name), implode($paramTypes, '|'))
-                )
-            ]);
-        }
-
-        return $cls;
-    }
-
-    protected function createFileGeneratorForClassGenerator(ClassGenerator $classGenerator): FileGenerator
-    {
-        $file = FileGenerator::fromArray([
-            'filename' => str_replace('\\', '/', $classGenerator->getNamespaceName() . '\\' . $classGenerator->getName()) . '.php',
-            'class' => $classGenerator,
-        ]);
-
-        $classGenerator->setContainingFileGenerator($file);
-        return $file;
-    }
-
-    protected function createOtherClassGenerators(): array
-    {
-        $classes = [
-            InterfaceGenerator::fromReflection(new ClassReflection(InputInterface::class)),
-            TraitGenerator::fromReflection(new ClassReflection(ClientTrait::class)),
-            ClassGenerator::fromReflection(new ClassReflection(CreateObjectIterator::class)),
-            $this->createClassGenerator([
-                'name' => 'AbstractInput',
-                'flags' => ClassGenerator::FLAG_ABSTRACT,
-                'interfaces' => [$this->namespace . '\\InputInterface'],
-                'hasDataTrait' => true,
-                'constants' => [
-                    ['OUTPUT_CLASS', null]
-                ],
-                'methods' => [
-                    $this->createMethodGenerator([
-                        'name' => 'getOutputClass',
-                        'body' => 'return static::OUTPUT_CLASS;',
-                        'returnType' => '?string',
-                        'docBlock' => [
-                            'tags' => [new ReturnTag('string|null')]
-                        ]
-                    ]),
-                ],
-            ])
-        ];
-
-        foreach ($classes as $cls) {
-            $cls->setNamespaceName($this->namespace);
-            $this->createFileGeneratorForClassGenerator($cls);
-        }
-        return $classes;
-    }
-
-    protected function createClassGenerator(array $spec, string $type = ClassGenerator::class): ClassGenerator
-    {
-        /** @var ClassGenerator $cls */
-        $cls = call_user_func([$type, 'fromArray'], $spec);
-
-        if ($interfaces = $spec['interfaces'] ?? null) {
-            $this->applyInterfaces($cls, ...$interfaces);
-        }
-
-        if ($spec['hasDataTrait'] ?? false) {
-            $this->applyHasDataTrait($cls);
-        }
-
-        $cls->addConstants($spec['constants'] ?? []);
-
-
-        $this->createFileGeneratorForClassGenerator($cls);
-        return $cls;
-    }
-
-    protected function createParameterGenerators(array ...$specs): array
-    {
-        return array_map([$this, 'createParameterGenerator'], $specs);
-    }
-
-    protected function createParameterGenerator(array $spec): ParameterGenerator
-    {
-        return ParameterGenerator::fromArray($spec);
-    }
-
     protected function resolveNamespace(AbstractModel $model): string
     {
-        $service = $this->context->getService();
-        return trim($this->namespace, '\\') . '\\' . $this->nameResolver->resolve($service);
+        return trim($this->namespace, '\\') . '\\' . $this->nameResolver->resolve($this->service);
     }
-
 
     protected function resolveFqcn(AbstractModel $model): string
     {
         return '\\' . trim($this->resolveNamespace($model) . '\\' . $this->nameResolver->resolve($model), '\\');
+    }
+
+
+    protected function isPhpType(Shape $shape): bool
+    {
+        return !in_array($shape->getType(), ['list', 'map', 'structure']);
     }
 
     protected function resolvePhpType(Shape $shape): string
@@ -638,18 +478,8 @@ class Generator implements LoggerAwareInterface
             case 'boolean':
                 return 'bool';
             default:
-                throw new \LogicException('TODO resolvePhpType: ' . $type);
+                throw new \LogicException('Unexpected resolvePhpType: ' . $type);
         }
-    }
-
-    protected function isPhpType(Shape $shape): bool
-    {
-        return !in_array($shape->getType(), ['list', 'map', 'structure']);
-    }
-
-    protected function resolveType(Shape $shape): string
-    {
-        return $this->isPhpType($shape) ? $this->resolvePhpType($shape) : $this->resolveFqcn($shape);
     }
 
     protected function debugEnter(AbstractModel $model): void
@@ -665,6 +495,6 @@ class Generator implements LoggerAwareInterface
 
     protected function debugLog(string $str): void
     {
-        $this->logger->debug(str_repeat(' ', $this->debugIndent) . $str);
+        $this->logger->debug($str, ['context' => $this->debugIndent]);
     }
 }

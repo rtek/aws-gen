@@ -11,7 +11,7 @@ use Func\S3\ListObjectsRequest;
 use Func\S3\ListObjectsV2Request;
 use Func\S3\PutObjectRequest;
 use Func\S3\S3Client;
-use Rtek\AwsGen\Generator\Generator;
+use Rtek\AwsGen\Generator;
 
 class S3 extends FunctionalTestCase
 {
@@ -29,12 +29,11 @@ class S3 extends FunctionalTestCase
      */
     public function testGenerate(): void
     {
-        $generator = new Generator();
-        $generator->setNamespace('Func')
-            ->addService('s3');
+        $gen = new Generator('Func');
+        $gen->addService('s3');
 
         $out = 'tests/_files/tmp/';
-        foreach ($generator() as $cls) {
+        foreach ($gen() as $cls) {
             $file = $cls->getContainingFileGenerator();
             $str = $file->generate();
             @mkdir($out . dirname($file->getFilename()), 0777, true);
@@ -96,6 +95,7 @@ class S3 extends FunctionalTestCase
 
         $output = $client->putObject($input);
 
+        $this->assertIsString($output->ETag());
         return $key;
     }
 

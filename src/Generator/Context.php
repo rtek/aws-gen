@@ -13,6 +13,9 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
 
+/**
+ * Maintains the set of `AbstractModel` that need to be generated as service classes
+ */
 class Context implements LoggerAwareInterface
 {
     use LoggerAwareTrait;
@@ -26,6 +29,9 @@ class Context implements LoggerAwareInterface
     /** @var array */
     protected $classes = [];
 
+    /**
+     * @param Service $service
+     */
     public function __construct(Service $service)
     {
         $this->service = $service;
@@ -49,6 +55,7 @@ class Context implements LoggerAwareInterface
     }
 
     /**
+     * Sets the visiting operation
      * @param Operation $operation
      */
     public function enterOperation(Operation $operation): void
@@ -56,11 +63,24 @@ class Context implements LoggerAwareInterface
         $this->operation = $operation;
     }
 
+    /**
+     * Clears the visiting operation
+     */
     public function exitOperation(): void
     {
         $this->operation = null;
     }
 
+    /**
+     * Registers an `AbstractModel` for generation
+     *
+     * A list of the service/operation contexts are kept but are not used yet
+     *
+     * @todo remove: this is probably useless
+     *
+     * @param AbstractModel $model
+     * @return bool true if the $model is already registered
+     */
     public function registerClass(AbstractModel $model): bool
     {
         if ($model instanceof Shape && !$this->operation) {
@@ -84,6 +104,11 @@ class Context implements LoggerAwareInterface
         return $exists;
     }
 
+    /**
+     * Returns a unique hash for an `AbstractModel` to avoid duplicate class generation
+     * @param AbstractModel $model
+     * @return string
+     */
     public function hash(AbstractModel $model): string
     {
         if ($model instanceof StructureShape) {
@@ -108,16 +133,30 @@ class Context implements LoggerAwareInterface
         return md5(print_r($toHash, true));
     }
 
+    /**
+     * Returns the class hashes to generate
+     * @return array
+     */
     public function getClassHashes(): array
     {
         return array_keys($this->classes);
     }
 
+    /**
+     * Returns the `AbstractModel` for a given `$hash`
+     * @param string $hash
+     * @return AbstractModel
+     */
     public function getClassModel(string $hash): AbstractModel
     {
         return $this->classes[$hash]['model'];
     }
 
+    /**
+     * Returns the context `Operation` for a given `$hash`
+     * @param string $hash
+     * @return Operation|null
+     */
     public function getClassOperation(string $hash): ?Operation
     {
         return $this->classes[$hash]['contexts'][0]['operation'] ?? null;

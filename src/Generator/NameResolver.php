@@ -7,32 +7,35 @@ use Aws\Api\Service;
 use Aws\Api\Shape;
 use Aws\Api\StructureShape;
 
+/**
+ * Resolves PHP class names from AWS `AbstractModel` names
+ */
 class NameResolver
 {
     const EMPTY_STRUCTURE_SHAPE = 'EmptyStructureShape';
 
-    /** @var Context */
-    protected $context;
-
     /** @var string[] */
-    protected $names;
+    protected $names = [];
 
-
-    public function setContext(Context $context): void
-    {
-        $this->context = $context;
-        $this->names = [];
-    }
-
+    /**
+     * Returns the PHP class name for an `AbstractModel`
+     *
+     * Invalid names are appended with an underscore:
+     * * Reserved PHP words
+     * * Names that already exist due to case sensitivity
+     *
+     * @param AbstractModel $model
+     * @return string
+     */
     public function resolve(AbstractModel $model): string
     {
-        $raw = $this->raw($model);
+        $unique = $this->unique($model);
 
-        if (!isset($this->names[$raw])) {
+        if (!isset($this->names[$unique])) {
             if ($model instanceof Shape) {
                 $name = $this->shape($model);
             } else {
-                $name = $raw;
+                $name = $unique;
             }
             //some apis have case sensitive shapes and php class names are case insensitive
             if (in_array($name, $this->names)) {
@@ -48,13 +51,18 @@ class NameResolver
                     $name .= '_';
             }
 
-            $this->names[$raw] = $name;
+            $this->names[$unique] = $name;
         }
 
-        return $this->names[$raw];
+        return $this->names[$unique];
     }
 
-    protected function raw(AbstractModel $model): string
+    /**
+     * Returns the unique name of the `AbstractModel`
+     * @param AbstractModel $model
+     * @return string
+     */
+    protected function unique(AbstractModel $model): string
     {
         if ($raw = (string)$model['name']) {
             return $raw;
@@ -67,7 +75,12 @@ class NameResolver
         throw new \LogicException("Could not get raw name");
     }
 
-    protected function shape(Shape $shape): ?string
+    /**
+     * Returns the name of a `\Aws\Api\Shape` or `self::EMPTY_STRUCTURE_SHAPE` if its an empty shape
+     * @param Shape $shape
+     * @return string
+     */
+    protected function shape(Shape $shape): string
     {
         if ($shape instanceof StructureShape && count($shape->getMembers()) === 0) {
             return self::EMPTY_STRUCTURE_SHAPE;
@@ -76,15 +89,26 @@ class NameResolver
         return ucfirst($shape['name']);
     }
 
+    /**
+     * Returns a normalized name for oddly named services
+     *
+     * @todo other oddly named services (?)
+     *
+     * @param Service $service
+     * @return string
+     */
     protected function service(Service $service): string
     {
         if (!$name = $service->getMetadata('namespace')) {
             $name = $service->getMetadata('targetPrefix');
 
+            //Exists as 'DynamoDbStreams' in SDK
             if (stripos($name, 'DynamoDBStreams') !== false) {
                 $name = 'DynamoDbStreams';
+            //Exists as 'DynamoDb' in SDK
             } elseif (stripos($name, 'DynamoDB') !== false) {
                 $name = 'DynamoDb';
+            //Not ucfirst in SDK
             } elseif (stripos($name, 'signer') !== false) {
                 $name = 'Singer';
             }
