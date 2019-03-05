@@ -176,7 +176,20 @@ class ServiceGenerator implements LoggerAwareInterface
             'name' => $name . 'Client',
             'namespaceName' => $namespace = $this->resolveNamespace($service),
             'extendedClass' => "\\Aws\\$name\\{$name}Client",
-            'docBlock' => $docs = $this->createDocBlockGenerator()
+            'docBlock' => $docs = $this->createDocBlockGenerator(),
+            'methods' => [
+                $this->createMethodGenerator([
+                    'name' => '__construct',
+                    'parameters' => $this->createParameterGenerators([
+                        'name' => 'config',
+                        'type' => 'array'
+                    ]),
+                    'body' => sprintf(
+                        "\$config['version'] = '%s';\nparent::__construct(\$config);",
+                        $service->getApiVersion()
+                    )
+                ])
+            ]
         ]);
 
         $cls->addTrait("\\{$this->namespace}\\ClientTrait");

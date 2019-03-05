@@ -83,7 +83,6 @@ class S3 extends FunctionalTestCase
     /**
      * @depends testCreateClient
      * @depends testCreateBucket
-     * @doesNotPerformAssertions
      * @param S3Client $client
      * @param string $bucket
      */
