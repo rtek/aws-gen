@@ -4,10 +4,10 @@
     "license": "MIT",
     "require": {
         "php": "^7.1",
-        "aws/aws-sdk-php": "^3.87",
-        "symfony/console": "^4.2",
+        "aws/aws-sdk-php": "^3.0",
+        "symfony/console": "^4.0",
         "zendframework/zend-code": "^3.3",
-        "symfony/finder": "^4.2",
+        "symfony/finder": "^4.0",
         "psr/log": "^1.1"
     },
     "require-dev": {
@@ -26,6 +26,8 @@
             "Rtek\\AwsGen\\Tests\\": "tests"
         }
     },
+    "bin": ["bin/aws-gen"],
+
     "scripts": {
         "cs-check": "phpcs",
         "cs-fix": "phpcbf"

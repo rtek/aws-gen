@@ -22,7 +22,7 @@ use Zend\Code\Reflection\ClassReflection;
 use function Aws\manifest;
 
 /**
- * Yields `Zend\Code\Generator\ClassGenerator` for AWS services
+ * Yields `\Zend\Code\Generator\ClassGenerator` for AWS services
  *
  * An example of the generated classes for S3:
  * * An extended client for the service:

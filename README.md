@@ -12,7 +12,7 @@ AwsGen has no runtime component, so require it as a development dependency:
 ## Why Bother?
 
 AWS has approximately 170 services with ~18,000 types. The SDK provides access 
-to these services using `\ArrayAccess` and rich [metadata](https://github.com/aws/aws-sdk-php/tree/master/src/data), 
+to these services using `\ArrayAccess` and rich runtime [metadata](https://github.com/aws/aws-sdk-php/tree/master/src/data), 
 but not offer code-completion by realizing the API in PHP classes.
 
 AwsGen will generate PHP classes for the services and operations that 
@@ -65,7 +65,15 @@ $input = \Gen\S3\GetObjectRequest::create($bucket, $key);
 $output = $client->getObject($input);
 echo "The object has a body of: {$output->Body()}\n";
 
-//`\IteratorAggregate` is implemented for collection-like properties
+//or just ignore AwsGen classes
+$result = $client->getObject([
+    'Bucket' => $bucket,
+    'Key' => $key,
+]);
+
+echo "The object still has a body of: {$result['Body']}\n";
+
+//`\IteratorAggregate` is implemented for iterable properties
 $output = $client->listObjectsV2(\Gen\S3\ListObjectsV2Request::create($bucket));
 foreach ($output->Contents() as $object) {
     $client->deleteObject(\Gen\S3\DeleteObjectRequest::create($bucket, $object->getKey()));

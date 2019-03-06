@@ -4,6 +4,9 @@ namespace Rtek\AwsGen\Writer;
 
 use Rtek\AwsGen\Generator;
 
+/**
+ * Write generated classes to a directory
+ */
 class DirWriter implements WriterInterface
 {
     /** @var string */

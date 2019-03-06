@@ -1,0 +1,16 @@
+<?php
+
+$paths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php'
+];
+foreach ($paths as $path) {
+    if (is_file($path)) {
+        require_once $path;
+      //  chdir(dirname($path,2));
+        break;
+    }
+}
+
+$app = new \Rtek\AwsGen\Console\Application();
+$app->run();
