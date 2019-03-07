@@ -1,6 +1,6 @@
-# AwsGen - PHP classes for [AWS SDK](https://github.com/aws/aws-sdk-php)
+# AwsGen - PHP classes for the [AWS SDK](https://github.com/aws/aws-sdk-php)
 
-AwsGen generates typed PHP classes that allow you to use Amazon Web Services 
+AwsGen generates strictly typed PHP classes that allow you to use Amazon Web Services 
 with objects instead of associative arrays.
 
 ## Installation
@@ -13,7 +13,7 @@ AwsGen has no runtime component, so require it as a development dependency:
 
 AWS has approximately 170 services with ~18,000 types. The SDK provides access 
 to these services using `\ArrayAccess` and rich runtime [metadata](https://github.com/aws/aws-sdk-php/tree/master/src/data), 
-but not offer code-completion by realizing the API in PHP classes.
+but not offer code-completion by realizing the API in PHP classes*.
 
 AwsGen will generate PHP classes for the services and operations that 
 you choose, while allowing you to use the underlying SDK at all times. 
@@ -21,14 +21,54 @@ you choose, while allowing you to use the underlying SDK at all times.
 You can treat these classes as read-only, or embed them in your project
 as the basis for more sophisticated wrappers.
 
+<sub>*If you used AwsGen for all services, there would be ~10 times more files than the SDK</sub>
 ## An Example: S3 Service
-### Generation
+
+### Console generation
+```
+$ vendor/bin/aws-gen generate
+
+ Search Service:
+ > s3
+
+ Choose Service [Search again]:
+  [0] Stop searching
+  [1] Search again
+  [2] s3
+  [3] s3:2006-03-01
+  [4] s3control
+  [5] s3control:2018-08-20
+ > 2
+
+ What namespace? [AwsGen]:
+ > Gen
+
+ What output directory? [src]:
+ > src
+
+Generating: s3
+==============
+
+ Added s3:latest
+ Generating...
+ ...Complete
+
+ [OK] Wrote 294 files to src/Gen
+```
+
+
+### PHP generation
 ```php
 <?php
 
-$gen = new \Rtek\AwsGen\Generator('Gen'); //generate classes to the 'Gen' namespace
+namespace Project;
+
+use Rtek\AwsGen\Generator;
+use Rtek\AwsGen\Writer\DirWriter;
+
+$gen = new Generator('Gen'); //generate classes to the 'Gen' namespace
 $gen->addService('s3', '2006-03-01'); //add the s3 service, version optional
-\Rtek\AwsGen\Writer\DirWriter::create('/path/to/src/Gen', true)->write($gen);
+DirWriter::create('src')->write($gen); //write to src/Gen
 ```
 ### Usage
 ```php
@@ -84,7 +124,7 @@ foreach ($output->Contents() as $object) {
 
 * `Service`
     * An AWS service that has a `Client` and metadata
-    * Contains multiple `Operation` and corresponding `Shape`
+    * Contains multiple `Operation` and `Shape`
     * e.g. `S3`, `DynamoDb`, `Ec2`
 * `Operation`
     * An AWS API call that does something
@@ -109,13 +149,16 @@ foreach ($output->Contents() as $object) {
     * Marshals an `Input` to the SDK `Operation` and returns the `Output`
     * e.g. `S3\S3Client`, `DynamoDb\DynamoDbClient`
     
-## Quirks / Issues
+## Issues / Quriks
 
 * Paginators are not implemented
 * CommandPools are not implemented
-* An underscore will be appended to a PHP class name when:
+* `\Aws\Result::$data` is passed by value to `Output` classes
+* `_` will be appended the PHP class name when:
     * A service contains two types with identical case-insensitive names
-    * A service contains a type with a PHP keyword as the name
+    * A type is a PHP keyword
 * Some service names are oddly named vs the namespace: e.g. `streams.dynamodb => DynamoDbStreams`
-* Some input classes use the term `Request` instead of `Input` per the SDK metadata
+* Some `Input` classes use the term `Request` instead of `Input` per the SDK metadata
 
+### Acknowledgements
+* Inspired by [goetas-webeservices/xsd2php](https://github.com/goetas-webservices/xsd2php)

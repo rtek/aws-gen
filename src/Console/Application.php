@@ -9,7 +9,7 @@ class Application extends \Symfony\Component\Console\Application
         parent::__construct('rtek/aws-gen', '0.1');
         $this->addCommands([
             new Command\Generate(),
-            new Command\ListServices(),
+            new Command\Services(),
         ]);
     }
 }

@@ -1,3 +1,4 @@
+#!/usr/bin/env php
 <?php
 
 $paths = [
@@ -7,10 +8,16 @@ $paths = [
 foreach ($paths as $path) {
     if (is_file($path)) {
         require_once $path;
-      //  chdir(dirname($path,2));
+        chdir(dirname($path,2));
         break;
     }
 }
+
+set_error_handler(function ($severity, $message, $file, $line) {
+    if (error_reporting() & $severity) {
+        throw new \ErrorException($message, 0, $severity, $file, $line);
+    }
+});
 
 $app = new \Rtek\AwsGen\Console\Application();
 $app->run();

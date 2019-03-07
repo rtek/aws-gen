@@ -102,14 +102,8 @@ class NameResolver
         if (!$name = $service->getMetadata('namespace')) {
             $name = $service->getMetadata('targetPrefix');
 
-            //Exists as 'DynamoDbStreams' in SDK
-            if (stripos($name, 'DynamoDBStreams') !== false) {
-                $name = 'DynamoDbStreams';
-            //Exists as 'DynamoDb' in SDK
-            } elseif (stripos($name, 'DynamoDB') !== false) {
-                $name = 'DynamoDb';
             //Not ucfirst in SDK
-            } elseif (stripos($name, 'signer') !== false) {
+            if (stripos($name, 'signer') !== false) {
                 $name = 'Singer';
             }
         }

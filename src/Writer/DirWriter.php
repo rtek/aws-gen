@@ -34,13 +34,20 @@ class DirWriter implements WriterInterface
 
     /**
      * @param Generator $generator
+     * @param int
      */
-    public function write(Generator $generator): void
+    public function write(Generator $generator): int
     {
-        foreach ($generator() as $cls) {
+        foreach ($generator() as $i => $cls) {
             $file = $cls->getContainingFileGenerator();
-            file_put_contents($this->dir . '/' . $file->getFilename(), $file->generate());
+            $path = $this->dir . '/' . $file->getFilename();
+            if (!is_dir($dir = dirname($path))) {
+                mkdir($dir, 0777, true);
+            }
+            file_put_contents($path, $file->generate());
         }
+
+        return $i ?? 0;
     }
 
     /**

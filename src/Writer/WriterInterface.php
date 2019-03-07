@@ -6,5 +6,10 @@ use Rtek\AwsGen\Generator;
 
 interface WriterInterface
 {
-    public function write(Generator $generator): void;
+    /**
+     * Write files yeilded by $generator and returns the number of files written
+     * @param Generator $generator
+     * @return int
+     */
+    public function write(Generator $generator): int;
 }
