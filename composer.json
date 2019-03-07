@@ -1,13 +1,14 @@
 {
     "name": "rtek/aws-gen",
-    "description": "Generate PHP classes for AWS data types",
+    "description": "Generate PHP classes for AWS services, operations and types",
+    "homepage": "https://github.com/rtek/aws-gen",
+    "keywords": ["aws", "generator", "object"],
     "license": "MIT",
     "require": {
         "php": "^7.1",
         "aws/aws-sdk-php": "^3.0",
         "symfony/console": "^4.0",
         "zendframework/zend-code": "^3.3",
-        "symfony/finder": "^4.0",
         "psr/log": "^1.1"
     },
     "require-dev": {

@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <ruleset>
+    <config name="installed_paths" value="../../slevomat/coding-standard"/>
 
     <arg name="report-width" value="100"/>
     <arg value="p"/>
@@ -10,19 +11,12 @@
     <exclude-pattern>/tests/_files/*</exclude-pattern>
 
     <rule ref="PSR12"/>
-
-
     <rule ref="Generic.Files.LineLength">
         <properties>
             <property name="lineLimit" value="150"/>
         </properties>
     </rule>
-
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
-
-    <config name="installed_paths" value="../../slevomat/coding-standard"/>
-
-
     <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
         <properties>
             <property name="spacesCountAroundEqualsSign" value="0"/>

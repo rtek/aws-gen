@@ -6,7 +6,7 @@ with objects instead of associative arrays.
 ## Installation
 AwsGen has no runtime component, so require it as a development dependency:
 ```
-//todo publish on packagist $ composer require --dev rtek/aws-gen
+$ composer require --dev rtek/aws-gen
 ```
 
 ## Why Bother?
@@ -21,7 +21,8 @@ you choose, while allowing you to use the underlying SDK at all times.
 You can treat these classes as read-only, or embed them in your project
 as the basis for more sophisticated wrappers.
 
-<sub>*If you used AwsGen for all services, there would be ~10 times more files than the SDK</sub>
+<sub>*If you used AwsGen for all services, there would be ~10x the number of files as the SDK</sub>
+
 ## An Example: S3 Service
 
 ### Console generation

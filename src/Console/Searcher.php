@@ -33,7 +33,11 @@ class Searcher
                 array_unshift($choices, self::STOP, self::AGAIN);
                 $value = $this->io->choice("Choose $thing", $choices, self::AGAIN);
             }
-        } while ($value !== self::STOP && (!$value || $value === self::AGAIN));
+
+            if ($value === self::STOP) {
+                throw new \RuntimeException('Search terminated');
+            }
+        } while (!$value || $value === self::AGAIN);
 
         return (string)$value;
     }
