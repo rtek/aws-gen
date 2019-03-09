@@ -13,7 +13,7 @@ $ composer require --dev rtek/aws-gen
 
 AWS has approximately 170 services with ~18,000 types. The SDK provides access 
 to these services using `\ArrayAccess` and rich runtime [metadata](https://github.com/aws/aws-sdk-php/tree/master/src/data), 
-but not offer code-completion by realizing the API in PHP classes*.
+but does not offer code-completion by realizing the API in PHP classes*.
 
 `\Rtek\AwsGen` will generate PHP classes for the services and operations that 
 you choose, while allowing you to use the underlying SDK at all times. 

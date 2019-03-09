@@ -1,8 +1,9 @@
 {
     "name": "rtek/aws-gen",
+    "type": "library",
     "description": "Generate PHP classes for AWS services, operations and types",
     "homepage": "https://github.com/rtek/aws-gen",
-    "keywords": ["aws", "generator", "object"],
+    "keywords": ["aws", "generator", "object", "code", "ec2", "s3", "rds", "dynamodb"],
     "license": "MIT",
 
     "require": {
