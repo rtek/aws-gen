@@ -4,6 +4,7 @@
     "homepage": "https://github.com/rtek/aws-gen",
     "keywords": ["aws", "generator", "object"],
     "license": "MIT",
+
     "require": {
         "php": "^7.1",
         "aws/aws-sdk-php": "^3.0",
@@ -11,6 +12,7 @@
         "zendframework/zend-code": "^3.3",
         "psr/log": "^1.1"
     },
+
     "require-dev": {
         "phpunit/phpunit": "^7.0|^8.0",
         "squizlabs/php_codesniffer": "^3.4",
@@ -20,13 +22,15 @@
     "autoload": {
         "psr-4": {
             "Rtek\\AwsGen\\": "src"
-        }
+        },
+        "files": ["src/functions.php"]
     },
     "autoload-dev": {
         "psr-4": {
             "Rtek\\AwsGen\\Tests\\": "tests"
         }
     },
+
     "bin": ["bin/aws-gen"],
 
     "scripts": {

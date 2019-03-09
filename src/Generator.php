@@ -84,6 +84,14 @@ class Generator implements LoggerAwareInterface
     }
 
     /**
+     * @return string
+     */
+    public function getNamespace(): string
+    {
+        return $this->namespace;
+    }
+
+    /**
      * A service generator factory with `$this` scope and signature: `(Service $service): ServiceGenerator`
      * @param callable $value
      * @return static
@@ -142,7 +150,7 @@ class Generator implements LoggerAwareInterface
     }
 
     /**
-     * The common classes contain the plumbing to wrap service classes with the AWS API
+     * The common classes contain the plumbing to wrap the AWS API with service classes
      *
      * * `InputInterface` allows the derived `<Service>Client` to identify and serialize input objects
      * * `ClientTrait` overrides the service client `__call` to detect input objects and return output objects
