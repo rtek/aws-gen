@@ -19,8 +19,15 @@ class S3 extends FunctionalTestCase
 
     public static function tearDownAfterClass()
     {
-        while (is_callable($fn = array_pop(static::$cleanup))) {
-            call_user_func($fn);
+
+        //work around for https://github.com/sebastianbergmann/phpunit/issues/3564
+        try {
+            while (is_callable($fn = array_pop(static::$cleanup))) {
+                call_user_func($fn);
+            }
+        } catch (\Throwable $e) {
+            var_dump($e);
+            exit();
         }
     }
 

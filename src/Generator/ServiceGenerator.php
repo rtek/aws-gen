@@ -272,7 +272,7 @@ class ServiceGenerator implements LoggerAwareInterface
     protected function createClassGeneratorForData(Shape $shape): ClassGenerator
     {
         $cls = $this->createClassGeneratorForShape($shape, ['setPrefix' => 'set', 'getPrefix' => 'get']);
-        $this->applyHasDataTrait($cls);
+        $cls->setExtendedClass("\\{$this->namespace}\\AbstractData");
         return $cls;
     }
 
@@ -312,10 +312,10 @@ class ServiceGenerator implements LoggerAwareInterface
 
         if ($this->isPhpType($member)) {
             $type = $this->resolvePhpType($member);
-            $body = "\$this->data[] = \$value;\nreturn \$this;";
+            $body = "\$this[] = \$value;\nreturn \$this;";
         } else {
             $type = $this->resolveFqcn($member);
-            $body = "\$this->data[] = \$value->toArray();\nreturn \$this;";
+            $body = "\$this[] = \$value->toArray();\nreturn \$this;";
         }
 
         $this->applyMethod($cls, [
@@ -334,10 +334,10 @@ class ServiceGenerator implements LoggerAwareInterface
 
         if ($this->isPhpType($value)) {
             $type = $this->resolvePhpType($value);
-            $body = "\$this->data[\$key] = \$value;\nreturn \$this;";
+            $body = "\$this[\$key] = \$value;\nreturn \$this;";
         } else {
             $type = $this->resolveFqcn($value);
-            $body = "\$this->data[\$key] = \$value->toArray();\nreturn \$this;";
+            $body = "\$this[\$key] = \$value->toArray();\nreturn \$this;";
         }
 
         $this->applyMethod($cls, [
@@ -355,10 +355,10 @@ class ServiceGenerator implements LoggerAwareInterface
         $this->applyInterfaces($cls, '\IteratorAggregate', '\ArrayAccess', '\Countable');
 
         if ($this->isPhpType($member)) {
-            $body = 'return new \ArrayIterator($this->data);';
+            $body = 'return new \ArrayIterator($this->toArray());';
         } else {
             $body = sprintf(
-                'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->data), %s::class);',
+                'return new \\%s\\CreateObjectIterator(new \ArrayIterator($this->toArray()), %s::class);',
                 $this->namespace,
                 $this->resolveFqcn($member)
             );

@@ -15,10 +15,9 @@ trait GeneratorHelperTrait
 {
 
     /**
-     * Adds `interfaces`, `hasDataTrait`, `constants` to `fromArray($spec)`, and generates a `FileGenerator` wrapper
+     * Adds `interfaces`, `constants`, `traits` to `fromArray($spec)`, and generates a `FileGenerator` wrapper
      *
      * * `interfaces` redirects to `applyInterfaces`
-     * * `hasDataTrait` redirects to `applyHasDataTrait`
      * * `constants` redirects to `ClassGenerator::addConstants()`
      *
      * @param array $spec
@@ -27,19 +26,25 @@ trait GeneratorHelperTrait
      */
     protected function createClassGenerator(array $spec = [], string $type = ClassGenerator::class): ClassGenerator
     {
+        if ($methods = $spec['methods'] ?? []) {
+            foreach ($methods as $i => $method) {
+                if (is_array($method)) {
+                    $spec['methods'][$i] = $this->createMethodGenerator($method);
+                }
+            }
+        }
         /** @var ClassGenerator $cls */
         $cls = call_user_func([$type, 'fromArray'], $spec);
 
-        if ($interfaces = $spec['interfaces'] ?? null) {
+        if ($interfaces = $spec['interfaces'] ?? []) {
             $this->applyInterfaces($cls, ...$interfaces);
-        }
-
-        if ($spec['hasDataTrait'] ?? false) {
-            $this->applyHasDataTrait($cls);
         }
 
         $cls->addConstants($spec['constants'] ?? []);
 
+        if ($traits = $spec['traits'] ?? []) {
+            $this->applyTraits($cls, ...$traits);
+        }
 
         $this->createFileGeneratorForClassGenerator($cls);
         return $cls;
@@ -124,24 +129,15 @@ trait GeneratorHelperTrait
     }
 
     /**
-     * Adds `Aws\HasDataTrait` to the class
+     * Adds traits to a `ClassGenerator`
      * @param ClassGenerator $cls
+     * @param string ...$traits
      */
-    protected function applyHasDataTrait(ClassGenerator $cls): void
+    protected function applyTraits(ClassGenerator $cls, string ...$traits)
     {
-        $cls->addTrait('\\Aws\\HasDataTrait');
-        $cls->addMethodFromGenerator(MethodGenerator::fromArray([
-            'name' => '__construct',
-            'parameters' => [
-                ParameterGenerator::fromArray([
-                    'name' => 'data',
-                    'type' => 'array',
-                    'defaultValue' => []
-                ])
-            ],
-            'body' => '$this->data = $data;'
-        ]));
-        $this->applyInterfaces($cls, '\ArrayAccess');
+        foreach ($traits as $trait) {
+            $cls->addTrait($trait);
+        }
     }
 
     /**

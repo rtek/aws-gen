@@ -4,6 +4,7 @@ namespace Rtek\AwsGen;
 
 use Aws\Api\ApiProvider;
 use Aws\Api\Service;
+use Aws\HasDataTrait;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use Psr\Log\NullLogger;
@@ -165,31 +166,56 @@ class Generator implements LoggerAwareInterface
             InterfaceGenerator::fromReflection(new ClassReflection(InputInterface::class)),
             TraitGenerator::fromReflection(new ClassReflection(ClientTrait::class)),
             ClassGenerator::fromReflection(new ClassReflection(CreateObjectIterator::class)),
-            $this->createClassGenerator([
+            $abstractInput = $this->createClassGenerator([
                 'name' => 'AbstractInput',
                 'flags' => ClassGenerator::FLAG_ABSTRACT,
-                'interfaces' => [$this->namespace . '\\InputInterface'],
-                'hasDataTrait' => true,
+                'interfaces' => [$this->namespace . '\\InputInterface', '\ArrayAccess'],
+                'traits' => ['\\Aws\\HasDataTrait'],
                 'constants' => [
                     ['OUTPUT_CLASS', null]
                 ],
-                'methods' => [
-                    $this->createMethodGenerator([
-                        'name' => 'getOutputClass',
-                        'body' => 'return static::OUTPUT_CLASS;',
-                        'returnType' => '?string',
-                        'docBlock' => [
-                            'tags' => [new ReturnTag('string|null')]
-                        ]
-                    ]),
-                ],
-            ])
+                'methods' => [[
+                    'name' => 'getOutputClass',
+                    'body' => 'return static::OUTPUT_CLASS;',
+                    'returnType' => '?string',
+                    'docBlock' => [
+                        'tags' => [new ReturnTag('string|null')]
+                    ]
+                ], [
+                    'name' => '__construct',
+                    'parameters' => [[
+                        'name' => 'data',
+                        'type' => 'array',
+                        'defaultValue' => []
+                       ]
+                    ],
+                    'body' => "foreach (\$data as \$key => \$value) {\n" .
+                              "    \$this->{\$key}(\$value);\n" .
+                              '}'
+                ]],
+            ]),
+            $abstractData = $this->createClassGenerator([
+                'name' => 'AbstractData',
+                'flags' => ClassGenerator::FLAG_ABSTRACT,
+                'interfaces' => ['\ArrayAccess'],
+                'traits' => ['\\Aws\\HasDataTrait'],
+                'methods' => [[
+                    'name' => '__construct',
+                    'parameters' => [[
+                        'name' => 'data',
+                        'type' => 'array',
+                        'defaultValue' => []
+                    ]],
+                    'body' => "\$this->data = \$data;"
+                ]],
+            ]),
         ];
 
         foreach ($classes as $cls) {
             $cls->setNamespaceName($this->namespace);
             $this->createFileGeneratorForClassGenerator($cls);
         }
+
         return $classes;
     }
 }

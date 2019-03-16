@@ -72,9 +72,11 @@ namespace App;
 use Rtek\AwsGen\Generator;
 use Rtek\AwsGen\Writer\DirWriter;
 
-$gen = new Generator('App\\AwsGen'); //generate classes to the 'App\AwsGen' namespace
+$gen = new Generator('App\\AwsGen');  //generate classes to the 'App\AwsGen' namespace
 $gen->addService('s3', '2006-03-01'); //add the s3 service, version optional
-DirWriter::create('src')->setPsr4Prefix('App\\')->write($gen); //write to src/AwsGen
+DirWriter::create('src')              //set the root directory to write the files
+    ->setPsr4Prefix('App\\')          //optionally set a PSR4 prefix
+    ->write($gen);                    //writes App\AwsGen\S3 to src/AwsGen/S3
 ```
 
 ### Usage
@@ -82,7 +84,8 @@ DirWriter::create('src')->setPsr4Prefix('App\\')->write($gen); //write to src/Aw
 <?php 
 
 namespace App;
-use App\AwsGen as Gen;
+
+use App\AwsGen\S3 as S3;
 
 $config = [
     'credentials' => [
@@ -91,42 +94,50 @@ $config = [
     ],
     'region' => 'us-east-1', 
 ];
-
 //generated client extends `\Aws\S3Client` with the same config as SDK except
 //for `version` which is overridden by the specified generation version
-$client = new Gen\S3\S3Client($config); 
-
+$client = new S3\S3Client($config); 
+                                    
 //the operation input create(...) contains required params
-$input = Gen\S3\CreateBucketRequest::create($bucket = 'test') 
-    ->Bucket($bucket) //or you can set them directly
-    ->ACL('public-read'); //just like you would optional params
-    
-$output = $client->createBucket($input); //operation names are the same as SDK
-echo "Bucket created at: {$output->Location()}\n"; //the operation output has getters that match the SDK 
+$input = S3\CreateBucketRequest::create($bucket = 'test'); 
 
-$input = Gen\S3\PutObjectRequest::create($bucket, $key = 'foo.txt')
-    ->Body('bar baz')
-    ->ContentType('text/plain');
+//they can be set directly just like optional params
+$input->Bucket($bucket)->ACL('public-read');               
+              
+//operation names are the same as SDK   
+$output = $client->createBucket($input);
 
-$output = $client->putObject($input);
-echo "Created object {$key} with ETag {$output->ETag()}\n"; //you can also use `$output['ETag']`
+//the operation output has getters that match the SDK 
+echo "Bucket created at: {$output->Location()}\n"; 
 
-$input = Gen\S3\GetObjectRequest::create($bucket, $key);
+//supports fluent interface
+$output = $client->putObject(
+    S3\PutObjectRequest::create($bucket, $key = 'foo.txt')
+        ->Body('bar baz')->ContentType('text/plain')
+);   
+
+//`\ArrayAccess` works as usual since output classes extend `\Aws\Result`
+echo "Created object {$key} with ETag {$output['ETag']}\n"; 
+
+//supports setting values via array by constructor
+$input = new S3\GetObjectRequest([
+    'Bucket' => $bucket,
+    'Key' => $key,
+]);
 $output = $client->getObject($input);
 echo "The object has a body of: {$output->Body()}\n";
 
-//or just ignore AwsGen classes
+//you can bypass AwsGen classes by passing the array argument to the client
 $result = $client->getObject([
     'Bucket' => $bucket,
     'Key' => $key,
 ]);
-
 echo "The object still has a body of: {$result['Body']}\n";
 
 //`\IteratorAggregate` is implemented for iterable properties
-$output = $client->listObjectsV2(Gen\S3\ListObjectsV2Request::create($bucket));
+$output = $client->listObjectsV2(S3\ListObjectsV2Request::create($bucket));
 foreach ($output->Contents() as $object) {
-    $client->deleteObject(Gen\S3\DeleteObjectRequest::create($bucket, $object->getKey()));
+    $client->deleteObject(S3\DeleteObjectRequest::create($bucket, $object->getKey()));
 }
 ```
 
