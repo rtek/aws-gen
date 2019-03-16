@@ -6,9 +6,11 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LogLevel;
 use Rtek\AwsGen\Generator;
+use Rtek\AwsGen\Tests\TmpTrait;
 
 abstract class AbstractTestCase extends TestCase
 {
+    use TmpTrait;
 
     protected function setUp()
     {
@@ -17,21 +19,15 @@ abstract class AbstractTestCase extends TestCase
 
     protected function generate(Generator $gen)
     {
-        $out = 'tests/_files/tmp/';
-        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($out, \RecursiveDirectoryIterator::SKIP_DOTS));
-        foreach ($files as $file) {
-            if ($file->getExtension() === 'php') {
-                @unlink((string)$file);
-            }
-        }
+        $this->cleanTmp();
 
         foreach ($gen() as $cls) {
             $file = $cls->getContainingFileGenerator();
             $str = $file->generate();
 
-            @mkdir($out . dirname($file->getFilename()), 0777, true);
+            $this->makeTmpDir(dirname($file->getFilename()));
 
-            if (file_exists($path = $out . $file->getFilename())) {
+            if (file_exists($path = $this->tmpDir . '/' . $file->getFilename())) {
                 echo "\n---EXISTING---\n";
                 echo $existing = file_get_contents($path);
                 echo "---NEW---\n";
@@ -40,7 +36,7 @@ abstract class AbstractTestCase extends TestCase
                 throw new \Exception("$path already exists - does new === existing? " . ($str === $existing ? 'Y' : 'N'));
             }
 
-            file_put_contents($path = $out . $file->getFilename(), $str);
+            file_put_contents($path = $this->tmpDir . '/' . $file->getFilename(), $str);
             require $path;
         }
     }

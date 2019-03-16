@@ -51,7 +51,7 @@ $ vendor/bin/aws-gen generate
   [0]
   [1] App\
   [2] App\AwsGen\
- > 2
+ > 1
 
 Generating: s3
 ==============
