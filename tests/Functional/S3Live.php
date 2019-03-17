@@ -13,7 +13,7 @@ use Func\S3\PutObjectRequest;
 use Func\S3\S3Client;
 use Rtek\AwsGen\Generator;
 
-class S3 extends FunctionalTestCase
+class S3Live extends FunctionalTestCase
 {
     protected static $cleanup = [];
 
